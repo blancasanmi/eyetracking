@@ -116,9 +116,9 @@ async def handler(ws):
                     print(f"  [TRIGGER] {value}")
                 elif cmd == "calibrate":
                     points_9 = [
-                    (0.1, 0.1), (0.5, 0.1), (0.9, 0.1),  
-                    (0.1, 0.5), (0.5, 0.5), (0.9, 0.5),  
-                    (0.1, 0.9), (0.5, 0.9), (0.9, 0.9),  
+                    (0.5, 0.1),   
+                    (0.05, 0.5), (0.5, 0.5), (0.95, 0.5),  
+                     (0.5, 0.9),
                     ]
 
                     sock.sendall(b'<SET ID="CALIBRATE_RESET" STATE="1" />\r\n')
