@@ -125,26 +125,22 @@ async def handler(ws):
 
                     for x, y in points_9:
                         sock.sendall(f'<SET ID="CALIBRATE_ADDPOINT" X="{x}" Y="{y}" />\r\n'.encode())
-
+                        
                     sock.sendall(b'<SET ID="CALIBRATE_SHOW" STATE="1" />\r\n')
                     sock.sendall(b'<SET ID="CALIBRATE_START" STATE="1" />\r\n')
                     print("[GP] Calibration started")
+                    await asyncio.sleep(30) # hqrd coded - todo: check if the values are okey
 
-                    # Listen for calibration result
-                    buf = ""
-                    while True:
-                        try:
-                            chunk = sock.recv(8192).decode("utf-8", errors="ignore")
-                            buf += chunk
-                            if "CALIBRATE_RESULT" in buf:
-                                # Send result back to browser
-                                await ws.send(json.dumps({
-                                    "type": "calibration_result",
-                                    "data": buf
-                                }))
-                                break
-                        except socket.timeout:
-                            continue
+                    sock.sendall(b'<SET ID="CALIBRATE_SHOW" STATE="0" />\r\n')
+
+                    sock.sendall(b'<GET ID="CALIBRATE_RESULT_SUMMARY" STATE="1" />\r\n')
+                    print("we asked for the calibration results")
+
+                    # this also seems to work - todo: find the way to get the average error and the number of valid points
+                    response = sock.recv(1024).decode('utf-8')
+                    print(response)
+                    root= ET.fromstring
+
 
                 elif cmd == "stop":
                     stop_event.set()
