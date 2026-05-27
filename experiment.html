@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Eye-Tracking Reading Experiment</title>
+  <script src="https://unpkg.com/jspsych@7.3.4"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.3"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.3"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-call-function@1.1.3"></script>
+  <link  href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet"/>
+  <style>
+    /* ── Sentence display ─────────────────────────────────────── */
+    .sentence-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      width: 100vw;
+      padding: 40px;
+      box-sizing: border-box;
+    }
+    .sentence-text {
+      font-family: 'Courier New', monospace; /* monospace = equal char width, easier to map gaze to character */
+      font-size: 64px;
+      line-height: 1.6;
+      letter-spacing: 4px;
+      text-align: center;
+      color: #111;
+      max-width: 90vw;
+    }
+
+    /* ── Gaze cursor overlay (for debug / calibration check) ── */
+    #gaze-dot {
+      position: fixed;
+      width: 20px;
+      height: 20px;
+      background: rgba(255, 0, 0, 0.5);
+      border-radius: 50%;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      z-index: 99999;
+      display: none;
+    }
+
+    /* ── Calibration targets ──────────────────────────────────── */
+    .calib-dot {
+      position: fixed;
+      width: 30px;
+      height: 30px;
+      background: red;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10000;
+    }
+
+    .instructions {
+      font-size: 24px;
+      max-width: 800px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div id="gaze-dot"></div>
+
+  <script>
+  // ═══════════════════════════════════════════════════════════════
+  //  CONFIGURATION
+  // ═══════════════════════════════════════════════════════════════
+
+  const WS_URL = "ws://localhost:8765";
+
+  // Sentences to display — add/edit as needed
+  const SENTENCES = [
+    "The curious cat slowly climbed the ancient oak tree in the garden",
+    "Every morning she walked to the bakery and bought fresh bread",
+    "Scientists discovered a new species of butterfly in the Amazon forest"
+  ];
+
+  const SHOW_GAZE_DOT = true;  // set to false to hide the red dot in production
+
+  // ═══════════════════════════════════════════════════════════════
+  //  WEBSOCKET + GAZE HANDLING
+  // ═══════════════════════════════════════════════════════════════
+
+  let ws = null;
+  let gazeLog = [];       // local buffer of all gaze samples
+  let connected = false;
+  let showGazeDot = true; // toggled by experiment phases
+
+  function ensureGazeDot() {
+    let dot = document.getElementById("gaze-dot");
+    if (!dot) {
+      dot = document.createElement("div");
+      dot.id = "gaze-dot";
+      dot.style.cssText = "position:fixed;width:20px;height:20px;background:rgba(255,0,0,0.5);border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);z-index:99999;";
+      document.body.appendChild(dot);
+    }
+    return dot;
+  }
+
+  function connectGazePoint() {
+    return new Promise((resolve, reject) => {
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        connected = true;
+        console.log("[GP] WebSocket connected");
+        resolve();
+      };
+
+      ws.onerror = (e) => {
+        console.error("[GP] WebSocket error", e);
+        reject(e);
+      };
+
+      ws.onclose = () => {
+        connected = false;
+        console.log("[GP] WebSocket closed");
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "gaze" && msg.data) {
+          const d = msg.data;
+          const sample = {
+            // Fixation POG (filtered)
+            fpogx: parseFloat(d.FPOGX),
+            fpogy: parseFloat(d.FPOGY),
+            fpogd: parseFloat(d.FPOGD || 0),   // fixation duration (s)
+            fpogv: parseInt(d.FPOGV || 0),      // fixation valid flag
+            fpogid: parseInt(d.FPOGID || 0),    // fixation ID
+            // Best POG (raw, for saccade detection)
+            bpogx: parseFloat(d.BPOGX || d.FPOGX),
+            bpogy: parseFloat(d.BPOGY || d.FPOGY),
+            bpogv: parseInt(d.BPOGV || 0),
+            // Time
+            time: parseFloat(d.TIME || 0),
+            // Marker
+            user_data: d.USER_DATA || "",
+            // Local timestamp
+            local_ts: performance.now()
+          };
+          gazeLog.push(sample);
+
+          // Show gaze dot — recreate if jsPsych wiped the DOM
+          if (SHOW_GAZE_DOT && showGazeDot) {
+            const dot = ensureGazeDot();
+            if (sample.fpogv) {
+              dot.style.display = "block";
+              dot.style.left = (sample.fpogx * window.innerWidth) + "px";
+              dot.style.top  = (sample.fpogy * window.innerHeight) + "px";
+            } else {
+              dot.style.display = "none";
+            }
+          }
+        }
+      };
+    });
+  }
+
+  function sendTrigger(label) {
+    if (ws && connected) {
+      ws.send(JSON.stringify({ cmd: "trigger", value: label }));
+      console.log("[TRIGGER]", label);
+    }
+  }
+
+  function startCalibration() {
+    if (ws && connected) {
+      ws.send(JSON.stringify({ cmd: "calibrate" }));
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  jsPsych EXPERIMENT
+  // ═══════════════════════════════════════════════════════════════
+
+  const jsPsych = initJsPsych({
+    on_finish: function () {
+      // Combine jsPsych data + gaze log, then submit to JATOS
+      const results = {
+        jspsych: jsPsych.data.get().json(),
+        gaze: gazeLog
+      };
+
+      // If running inside JATOS
+      if (typeof jatos !== "undefined") {
+        jatos.submitResultData(JSON.stringify(results), jatos.startNextComponent);
+      } else {
+        console.log("Results:", results);
+        document.body.innerHTML = "<pre style='padding:20px;font-size:14px;'>" +
+          JSON.stringify(results, null, 2).slice(0, 5000) + "\n...</pre>";
+      }
+    }
+  });
+
+  const timeline = [];
+
+  // ── 1. Connect to relay ────────────────────────────────────────
+
+  timeline.push({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: `
+      <div class="instructions">
+        <h2>Eye-Tracking Reading Experiment</h2>
+        <p>This experiment tracks your eye movements while you read sentences.</p>
+        <p><strong>Before starting:</strong></p>
+        <ol>
+          <li>Make sure <em>Gazepoint Control</em> is running</li>
+          <li>Make sure <em>gp_relay.py</em> is running</li>
+          <li>Sit comfortably ~60 cm from the screen</li>
+        </ol>
+        <p>Click below to connect to the eye tracker.</p>
+      </div>
+    `,
+    choices: ["Connect to Eye Tracker"],
+    on_finish: () => {} // connection happens in next trial
+  });
+
+  timeline.push({
+    type: jsPsychCallFunction,
+    async: true,
+    func: async function (done) {
+      try {
+        await connectGazePoint();
+        done({ success: true });
+      } catch (e) {
+        done({ success: false, error: e.message });
+      }
+    }
+  });
+
+  // ── 2. Calibration ────────────────────────────────────────────
+
+  timeline.push({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: `
+      <div class="instructions">
+        <h2>Calibration</h2>
+        <p>A calibration screen will appear in the <strong>Gazepoint Control</strong> window.</p>
+        <p>Follow the moving dot with your eyes (not your head).</p>
+        <p>Click below to start calibration.</p>
+      </div>
+    `,
+    choices: ["Start Calibration"],
+    on_finish: () => {
+      startCalibration();
+    }
+  });
+
+  // Wait for calibration to finish (user presses space)
+  timeline.push({
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <div class="instructions">
+        <h2>Calibrating...</h2>
+        <p>Complete the calibration in the Gazepoint Control window.</p>
+        <p>When it finishes, press <strong>SPACE</strong> to continue.</p>
+      </div>
+    `,
+    choices: [" "]
+  });
+
+  // ── 3. Gaze check (show dot so participant can verify) ────────
+
+  timeline.push({
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <div class="instructions">
+        <h2>Gaze Check</h2>
+        <p>You should see a <span style="color:red;">red dot</span> following your gaze.</p>
+        <p>Look around the screen to verify tracking is working.</p>
+        <p>Press <strong>SPACE</strong> when ready to begin.</p>
+      </div>
+    `,
+    choices: [" "],
+    on_start: () => {
+      showGazeDot = true;
+    }
+  });
+
+  // ── 4. Sentence reading trials ────────────────────────────────
+
+  // Fixation cross before each sentence
+  function makeSentenceTrial(sentence, index) {
+    const trialId = `sentence_${index}`;
+
+    // Fixation cross
+    timeline.push({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: '<div style="font-size:80px;text-align:center;">+</div>',
+      choices: "NO_KEYS",
+      trial_duration: 1000,
+      on_start: () => sendTrigger(`fixation_onset_${trialId}`)
+    });
+
+    // Sentence display — press SPACE when done reading
+    timeline.push({
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `
+        <div class="sentence-container">
+          <div class="sentence-text">${sentence}</div>
+        </div>
+      `,
+      choices: [" "],
+      data: { task: "reading", sentence: sentence, trial_index: index },
+      on_start: () => sendTrigger(`sentence_onset_${trialId}`),
+      on_finish: (data) => {
+        sendTrigger(`sentence_offset_${trialId}`);
+        data.rt_ms = data.rt;
+      }
+    });
+  }
+
+  // Add all sentence trials
+  SENTENCES.forEach((s, i) => makeSentenceTrial(s, i));
+
+  // ── 5. End ────────────────────────────────────────────────────
+
+  timeline.push({
+    type: jsPsychHtmlButtonResponse,
+    stimulus: `
+      <div class="instructions">
+        <h2>Done!</h2>
+        <p>Thank you. Your data is being saved.</p>
+      </div>
+    `,
+    choices: ["Finish"],
+    on_start: () => {
+      sendTrigger("experiment_end");
+      showGazeDot = false;
+      const dot = document.getElementById("gaze-dot");
+      if (dot) dot.style.display = "none";
+    }
+  });
+
+  // ── Run ────────────────────────────────────────────────────────
+  jsPsych.run(timeline);
+
+  </script>
+</body>
+</html>
