@@ -6,9 +6,8 @@
   <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.3"></script>
   <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.3"></script>
   <script src="https://unpkg.com/@jspsych/plugin-call-function@1.1.3"></script>
-  <link  href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet"/>
+  <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet"/>
   <style>
-    /* ── Sentence display ─────────────────────────────────────── */
     .sentence-container {
       display: flex;
       align-items: center;
@@ -19,7 +18,7 @@
       box-sizing: border-box;
     }
     .sentence-text {
-      font-family: 'Courier New', monospace; /* monospace = equal char width, easier to map gaze to character */
+      font-family: 'Courier New', monospace;
       font-size: 64px;
       line-height: 1.6;
       letter-spacing: 4px;
@@ -27,8 +26,6 @@
       color: #111;
       max-width: 90vw;
     }
-
-    /* ── Gaze cursor overlay (for debug / calibration check) ── */
     #gaze-dot {
       position: fixed;
       width: 20px;
@@ -40,8 +37,6 @@
       z-index: 99999;
       display: none;
     }
-
-    /* ── Calibration targets ──────────────────────────────────── */
     .calib-dot {
       position: fixed;
       width: 30px;
@@ -51,12 +46,25 @@
       transform: translate(-50%, -50%);
       z-index: 10000;
     }
-
     .instructions {
       font-size: 24px;
       max-width: 800px;
       line-height: 1.6;
     }
+
+    /* Calibration quality badge */
+    .quality-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-weight: bold;
+      font-size: 18px;
+    }
+    .quality-excellent { background: #d4edda; color: #155724; }
+    .quality-good      { background: #cce5ff; color: #004085; }
+    .quality-acceptable{ background: #fff3cd; color: #856404; }
+    .quality-poor      { background: #f8d7da; color: #721c24; }
+    .quality-unknown   { background: #e2e3e5; color: #383d41; }
   </style>
 </head>
 <body>
@@ -69,23 +77,31 @@
 
   const WS_URL = "ws://localhost:8765";
 
-  // Sentences to display — add/edit as needed
   const SENTENCES = [
     "The curious cat slowly climbed the ancient oak tree in the garden",
     "Every morning she walked to the bakery and bought fresh bread",
     "Scientists discovered a new species of butterfly in the Amazon forest"
   ];
 
-  const SHOW_GAZE_DOT = true;  // set to false to hide the red dot in production
+  const SHOW_GAZE_DOT = true;
+
+  // Calibration thresholds
+  const CALIB_QUALITY_THRESHOLD = "acceptable"; // warn if below this
+  const QUALITY_RANK = { excellent: 4, good: 3, acceptable: 2, poor: 1, unknown: 0 };
+
+  // ═══════════════════════════════════════════════════════════════
+  //  STATE
+  // ═══════════════════════════════════════════════════════════════
+
+  let ws = null;
+  let gazeLog = [];
+  let connected = false;
+  let showGazeDot = true;
+  let lastCalibResult = null;  // stores result from most recent calibration
 
   // ═══════════════════════════════════════════════════════════════
   //  WEBSOCKET + GAZE HANDLING
   // ═══════════════════════════════════════════════════════════════
-
-  let ws = null;
-  let gazeLog = [];       // local buffer of all gaze samples
-  let connected = false;
-  let showGazeDot = true; // toggled by experiment phases
 
   function ensureGazeDot() {
     let dot = document.getElementById("gaze-dot");
@@ -118,44 +134,49 @@
         console.log("[GP] WebSocket closed");
       };
 
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "gaze" && msg.data) {
-          const d = msg.data;
-          const sample = {
-            // Fixation POG (filtered)
-            fpogx: parseFloat(d.FPOGX),
-            fpogy: parseFloat(d.FPOGY),
-            fpogd: parseFloat(d.FPOGD || 0),   // fixation duration (s)
-            fpogv: parseInt(d.FPOGV || 0),      // fixation valid flag
-            fpogid: parseInt(d.FPOGID || 0),    // fixation ID
-            // Best POG (raw, for saccade detection)
-            bpogx: parseFloat(d.BPOGX || d.FPOGX),
-            bpogy: parseFloat(d.BPOGY || d.FPOGY),
-            bpogv: parseInt(d.BPOGV || 0),
-            // Time
-            time: parseFloat(d.TIME || 0),
-            // Marker
-            user_data: d.USER_DATA || "",
-            // Local timestamp
-            local_ts: performance.now()
-          };
-          gazeLog.push(sample);
-
-          // Show gaze dot — recreate if jsPsych wiped the DOM
-          if (SHOW_GAZE_DOT && showGazeDot) {
-            const dot = ensureGazeDot();
-            if (sample.fpogv) {
-              dot.style.display = "block";
-              dot.style.left = (sample.fpogx * window.innerWidth) + "px";
-              dot.style.top  = (sample.fpogy * window.innerHeight) + "px";
-            } else {
-              dot.style.display = "none";
-            }
-          }
-        }
-      };
+      ws.onmessage = handleMessage;
     });
+  }
+
+  function handleMessage(event) {
+    const msg = JSON.parse(event.data);
+
+    if (msg.type === "gaze" && msg.data) {
+      const d = msg.data;
+      const sample = {
+        fpogx: parseFloat(d.FPOGX),
+        fpogy: parseFloat(d.FPOGY),
+        fpogd: parseFloat(d.FPOGD || 0),
+        fpogv: parseInt(d.FPOGV || 0),
+        fpogid: parseInt(d.FPOGID || 0),
+        bpogx: parseFloat(d.BPOGX || d.FPOGX),
+        bpogy: parseFloat(d.BPOGY || d.FPOGY),
+        bpogv: parseInt(d.BPOGV || 0),
+        time: parseFloat(d.TIME || 0),
+        user_data: d.USER_DATA || "",
+        local_ts: performance.now()
+      };
+      gazeLog.push(sample);
+
+      if (SHOW_GAZE_DOT && showGazeDot) {
+        const dot = ensureGazeDot();
+        if (sample.fpogv) {
+          dot.style.display = "block";
+          dot.style.left = (sample.fpogx * window.innerWidth) + "px";
+          dot.style.top  = (sample.fpogy * window.innerHeight) + "px";
+        } else {
+          dot.style.display = "none";
+        }
+      }
+    }
+
+    // Calibration result coming back from relay
+    if (msg.type === "calibration_result") {
+      console.log("[CALIB] Result received:", msg);
+      lastCalibResult = msg;
+      // Dispatch a custom event so the waiting trial can react
+      window.dispatchEvent(new CustomEvent("calibration_done", { detail: msg }));
+    }
   }
 
   function sendTrigger(label) {
@@ -166,9 +187,20 @@
   }
 
   function startCalibration() {
+    lastCalibResult = null;
     if (ws && connected) {
       ws.send(JSON.stringify({ cmd: "calibrate" }));
+      console.log("[CALIB] Calibration command sent");
     }
+  }
+
+  function qualityBadge(quality) {
+    const label = quality || "unknown";
+    return `<span class="quality-badge quality-${label}">${label}</span>`;
+  }
+
+  function isBelowThreshold(quality) {
+    return (QUALITY_RANK[quality] || 0) < (QUALITY_RANK[CALIB_QUALITY_THRESHOLD] || 0);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -177,13 +209,12 @@
 
   const jsPsych = initJsPsych({
     on_finish: function () {
-      // Combine jsPsych data + gaze log, then submit to JATOS
       const results = {
         jspsych: jsPsych.data.get().json(),
-        gaze: gazeLog
+        gaze: gazeLog,
+        calibration: lastCalibResult
       };
 
-      // If running inside JATOS
       if (typeof jatos !== "undefined") {
         jatos.submitResultData(JSON.stringify(results), jatos.startNextComponent);
       } else {
@@ -196,7 +227,7 @@
 
   const timeline = [];
 
-  // ── 1. Connect to relay ────────────────────────────────────────
+  // ── 1. Connect ─────────────────────────────────────────────────
 
   timeline.push({
     type: jsPsychHtmlButtonResponse,
@@ -208,13 +239,13 @@
         <ol>
           <li>Make sure <em>Gazepoint Control</em> is running</li>
           <li>Make sure <em>gp_relay.py</em> is running</li>
-          <li>Sit comfortably ~60 cm from the screen</li>
+          <li>Sit comfortably <strong>60–65 cm</strong> from the screen</li>
+          <li>Keep your head still during calibration — move only your eyes</li>
         </ol>
         <p>Click below to connect to the eye tracker.</p>
       </div>
     `,
-    choices: ["Connect to Eye Tracker"],
-    on_finish: () => {} // connection happens in next trial
+    choices: ["Connect to Eye Tracker"]
   });
 
   timeline.push({
@@ -230,38 +261,92 @@
     }
   });
 
-  // ── 2. Calibration ────────────────────────────────────────────
+  // ── 2. Calibration loop ────────────────────────────────────────
+  //
+  //  We use a loop so the participant can recalibrate as many times
+  //  as needed until quality is acceptable.
 
-  timeline.push({
-    type: jsPsychHtmlButtonResponse,
-    stimulus: `
-      <div class="instructions">
-        <h2>Calibration</h2>
-        <p>A calibration screen will appear in the <strong>Gazepoint Control</strong> window.</p>
-        <p>Follow the moving dot with your eyes (not your head).</p>
-        <p>Click below to start calibration.</p>
-      </div>
-    `,
-    choices: ["Start Calibration"],
-    on_finish: () => {
-      startCalibration();
-    }
-  });
+  function buildCalibrationTrials() {
 
-  // Wait for calibration to finish (user presses space)
-  timeline.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: `
-      <div class="instructions">
-        <h2>Calibrating...</h2>
-        <p>Complete the calibration in the Gazepoint Control window.</p>
-        <p>When it finishes, press <strong>SPACE</strong> to continue.</p>
-      </div>
-    `,
-    choices: [" "]
-  });
+    // 2a. Instruction screen — starts calibration on button click
+    const calibInstruction = {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `
+        <div class="instructions">
+          <h2>Calibration</h2>
+          <p>A <strong>9-point</strong> calibration screen will appear in the
+             <em>Gazepoint Control</em> window.</p>
+          <ul>
+            <li>Follow the moving dot with your <strong>eyes only</strong> — not your head</li>
+            <li>Keep your head still and maintain ~60 cm distance</li>
+            <li>Blink normally</li>
+          </ul>
+          <p>The calibration result will appear automatically when done.</p>
+        </div>
+      `,
+      choices: ["Start Calibration"],
+      on_finish: () => { startCalibration(); }
+    };
 
-  // ── 3. Gaze check (show dot so participant can verify) ────────
+    // 2b. Wait for calibration_done event (replaces manual SPACE press)
+    const calibWait = {
+      type: jsPsychCallFunction,
+      async: true,
+      func: function(done) {
+        // If result already arrived (fast calibration), proceed immediately
+        if (lastCalibResult) { done(); return; }
+
+        function onDone() {
+          window.removeEventListener("calibration_done", onDone);
+          done();
+        }
+        window.addEventListener("calibration_done", onDone);
+      }
+    };
+
+    // 2c. Show result and offer recalibration if quality is poor
+    const calibResult = {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: function() {
+        const r = lastCalibResult || {};
+        const quality = r.quality || "unknown";
+        const err = (r.avg_error >= 0) ? r.avg_error.toFixed(3) + "°" : "n/a";
+        const warn = isBelowThreshold(quality)
+          ? `<p style="color:#856404;background:#fff3cd;padding:10px;border-radius:6px;">
+               ⚠️ Calibration quality is below threshold. Recalibration recommended.
+             </p>`
+          : `<p style="color:#155724;">✓ Calibration looks good. You can proceed.</p>`;
+
+        return `
+          <div class="instructions">
+            <h2>Calibration Result</h2>
+            <p>Quality: ${qualityBadge(quality)} &nbsp; Average error: <strong>${err}</strong></p>
+            ${warn}
+            <p>Check the red dot — look around the screen to verify accuracy.</p>
+            <p>Would you like to proceed or recalibrate?</p>
+          </div>
+        `;
+      },
+      choices: ["Proceed", "Recalibrate"],
+      on_start: () => { showGazeDot = true; },
+      data: { task: "calibration_decision" }
+    };
+
+    // 2d. Conditional: loop back if "Recalibrate" was chosen (response index 1)
+    const calibConditional = {
+      timeline: [calibInstruction, calibWait, calibResult],
+      loop_function: function(data) {
+        const last = data.filter({ task: "calibration_decision" }).last(1).values()[0];
+        return last && last.response === 1; // 1 = "Recalibrate"
+      }
+    };
+
+    return calibConditional;
+  }
+
+  timeline.push(buildCalibrationTrials());
+
+  // ── 3. Gaze check ─────────────────────────────────────────────
 
   timeline.push({
     type: jsPsychHtmlKeyboardResponse,
@@ -269,23 +354,19 @@
       <div class="instructions">
         <h2>Gaze Check</h2>
         <p>You should see a <span style="color:red;">red dot</span> following your gaze.</p>
-        <p>Look around the screen to verify tracking is working.</p>
+        <p>Look at each corner of the screen to verify accuracy.</p>
         <p>Press <strong>SPACE</strong> when ready to begin.</p>
       </div>
     `,
     choices: [" "],
-    on_start: () => {
-      showGazeDot = true;
-    }
+    on_start: () => { showGazeDot = true; }
   });
 
   // ── 4. Sentence reading trials ────────────────────────────────
 
-  // Fixation cross before each sentence
   function makeSentenceTrial(sentence, index) {
     const trialId = `sentence_${index}`;
 
-    // Fixation cross
     timeline.push({
       type: jsPsychHtmlKeyboardResponse,
       stimulus: '<div style="font-size:80px;text-align:center;">+</div>',
@@ -294,7 +375,6 @@
       on_start: () => sendTrigger(`fixation_onset_${trialId}`)
     });
 
-    // Sentence display — press SPACE when done reading
     timeline.push({
       type: jsPsychHtmlKeyboardResponse,
       stimulus: `
@@ -312,7 +392,6 @@
     });
   }
 
-  // Add all sentence trials
   SENTENCES.forEach((s, i) => makeSentenceTrial(s, i));
 
   // ── 5. End ────────────────────────────────────────────────────
