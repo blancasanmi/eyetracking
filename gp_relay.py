@@ -125,10 +125,27 @@ async def handler(ws):
 
                     for x, y in points_9:
                         sock.sendall(f'<SET ID="CALIBRATE_ADDPOINT" X="{x}" Y="{y}" />\r\n'.encode())
-                        
+
                     sock.sendall(b'<SET ID="CALIBRATE_SHOW" STATE="1" />\r\n')
                     sock.sendall(b'<SET ID="CALIBRATE_START" STATE="1" />\r\n')
                     print("[GP] Calibration started")
+
+                    # Listen for calibration result
+                    buf = ""
+                    while True:
+                        try:
+                            chunk = sock.recv(8192).decode("utf-8", errors="ignore")
+                            buf += chunk
+                            if "CALIBRATE_RESULT" in buf:
+                                # Send result back to browser
+                                await ws.send(json.dumps({
+                                    "type": "calibration_result",
+                                    "data": buf
+                                }))
+                                break
+                        except socket.timeout:
+                            continue
+
                 elif cmd == "stop":
                     stop_event.set()
                     break
