@@ -1,5 +1,5 @@
 """
-GazePoint WebSocket Relay (v2)
+GazePoint WebSocket Relay (v3)
 ==============================
 Requires: pip install websockets
 
@@ -21,6 +21,8 @@ GP_HOST = "127.0.0.1"
 GP_PORT = 4242
 WS_HOST = "localhost"
 WS_PORT = 8765
+
+CALIBRATION_POINTS = 9  # 9-point grid for better accuracy on reading tasks
 
 
 def gaze_reader_thread(sock, gaze_queue, stop_event):
@@ -51,6 +53,77 @@ def gaze_reader_thread(sock, gaze_queue, stop_event):
             break
 
     print("[THREAD] Gaze reader stopped")
+
+
+def run_calibration(sock):
+    """
+    Run Gazepoint calibration with 9 points and return quality result.
+    Returns a dict with calibration quality info or None on timeout.
+    """
+    print(f"[GP] Starting {CALIBRATION_POINTS}-point calibration...")
+
+    # Reset any previous calibration
+    sock.sendall(b'<SET ID="CALIBRATE_RESET" STATE="1" />\r\n')
+
+    # Set number of calibration points
+    sock.sendall(f'<SET ID="CALIBRATE_NUMPOINTS" VALUE="{CALIBRATION_POINTS}" />\r\n'.encode())
+
+    # Start calibration
+    sock.sendall(b'<SET ID="CALIBRATE_START" STATE="1" />\r\n')
+
+    # Wait for calibration result (timeout after 120s)
+    buf = ""
+    timeout_count = 0
+    max_timeout = 1200  # 120 seconds (each loop = 0.1s)
+
+    while timeout_count < max_timeout:
+        try:
+            chunk = sock.recv(8192).decode("utf-8", errors="ignore")
+            buf += chunk
+
+            # Gazepoint signals completion with CALIBRATE_RESULT
+            if "CALIBRATE_RESULT" in buf:
+                print("[GP] Calibration complete, parsing result...")
+                try:
+                    # Extract calibration result XML
+                    match = re.search(r'<ACK[^>]*CALIBRATE_RESULT[^>]*/>', buf)
+                    if match:
+                        el = ET.fromstring(match.group())
+                        result = dict(el.attrib)
+                        avg_error = float(result.get("AVE", -1))
+                        print(f"[GP] Average calibration error: {avg_error:.4f} degrees")
+                        return {
+                            "success": True,
+                            "avg_error": avg_error,
+                            "quality": _rate_calibration(avg_error),
+                            "raw": result
+                        }
+                except Exception as e:
+                    print(f"[GP] Could not parse calibration result: {e}")
+                    return {"success": True, "avg_error": -1, "quality": "unknown"}
+
+        except socket.timeout:
+            timeout_count += 1
+            continue
+        except OSError:
+            break
+
+    print("[GP] Calibration timed out")
+    return None
+
+
+def _rate_calibration(avg_error_degrees):
+    """Rate calibration quality based on average error in degrees."""
+    if avg_error_degrees < 0:
+        return "unknown"
+    elif avg_error_degrees < 0.5:
+        return "excellent"
+    elif avg_error_degrees < 1.0:
+        return "good"
+    elif avg_error_degrees < 2.0:
+        return "acceptable"
+    else:
+        return "poor"
 
 
 async def handler(ws):
@@ -110,16 +183,38 @@ async def handler(ws):
             async for raw in ws:
                 msg = json.loads(raw)
                 cmd = msg.get("cmd")
+
                 if cmd == "trigger":
                     value = msg.get("value", "").replace('"', "'")
                     sock.sendall(f'<SET ID="USER_DATA" VALUE="{value}" />\r\n'.encode())
                     print(f"  [TRIGGER] {value}")
+
                 elif cmd == "calibrate":
-                    sock.sendall(b'<SET ID="CALIBRATE_START" STATE="1" />\r\n')
-                    print("[GP] Calibration started")
+                    # Run calibration in a thread so we don't block the event loop
+                    loop = asyncio.get_event_loop()
+                    result = await loop.run_in_executor(None, run_calibration, sock)
+
+                    if result:
+                        print(f"[GP] Calibration quality: {result['quality']} "
+                              f"(avg error: {result['avg_error']:.4f} deg)")
+                        await ws.send(json.dumps({
+                            "type": "calibration_result",
+                            "quality": result["quality"],
+                            "avg_error": result["avg_error"],
+                            "success": result["success"]
+                        }))
+                    else:
+                        await ws.send(json.dumps({
+                            "type": "calibration_result",
+                            "quality": "unknown",
+                            "avg_error": -1,
+                            "success": False
+                        }))
+
                 elif cmd == "stop":
                     stop_event.set()
                     break
+
         except websockets.ConnectionClosed:
             stop_event.set()
 
