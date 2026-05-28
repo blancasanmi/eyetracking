@@ -105,6 +105,66 @@ async def handler(ws):
 
             await asyncio.sleep(0.005)
 
+    async def calibrate_eval():
+        points_9 = [
+        (0.5, 0.1),   
+        (0.05, 0.5), (0.5, 0.5), (0.95, 0.5),  
+            (0.5, 0.9),
+        ]
+
+        sock.sendall(b'<SET ID="CALIBRATE_RESET" STATE="1" />\r\n')
+
+        for x, y in points_9:
+            sock.sendall(f'<SET ID="CALIBRATE_ADDPOINT" X="{x}" Y="{y}" />\r\n'.encode())
+            
+        sock.sendall(b'<SET ID="CALIBRATE_SHOW" STATE="1" />\r\n')
+        sock.sendall(b'<SET ID="CALIBRATE_START" STATE="1" />\r\n')
+        print("[GP] Calibration started")
+        await asyncio.sleep(30) # hqrd coded - todo: check if the values are okey
+
+        sock.sendall(b'<GET ID="CALIBRATE_RESULT_SUMMARY" STATE="1" />\r\n')
+        print("we asked for the calibration results")
+
+        sock.sendall(b'<SET ID="CALIBRATE_SHOW" STATE="0" />\r\n')
+
+    
+        buf = ""
+        buf2 = ""
+        while True:
+            chunk = sock.recv(8024).decode('utf-8')
+            chunk2 = sock.recv(1024).decode('utf-8')
+
+            buf += chunk 
+            buf2 += chunk2
+            if "CALIBRATE_RESULT_SUMMARY" in buf:
+                response = chunk 
+                break
+            if "CALIBRATE_RESULT_SUMMARY" in buf2:
+                response = chunk 
+                break
+
+        # this also seems to work - todo: find the way to get the average error and the number of valid points
+        print("the response is ", response, type(response))
+
+
+        pattern = r'<ACK[^>]*ID="CALIBRATE_RESULT_SUMMARY"[^>]*/>'
+
+        match = re.search(pattern, response)
+
+        if match:
+            root = ET.fromstring(match.group(0))
+
+            if root.attrib.get("ID") == "CALIBRATE_RESULT_SUMMARY":
+                avg_error = float(root.attrib["AVE_ERROR"])
+                valid_points = float(root.attrib["VALID_POINTS"])
+
+                print("avg_error", avg_error)
+                print("valid_points", valid_points)
+
+        return avg_error, valid_points
+
+
+
     async def receive_commands():
         try:
             async for raw in ws:
@@ -115,53 +175,22 @@ async def handler(ws):
                     sock.sendall(f'<SET ID="USER_DATA" VALUE="{value}" />\r\n'.encode())
                     print(f"  [TRIGGER] {value}")
                 elif cmd == "calibrate":
-                    points_9 = [
-                    (0.5, 0.1),   
-                    (0.05, 0.5), (0.5, 0.5), (0.95, 0.5),  
-                     (0.5, 0.9),
-                    ]
+                    
+                    times = 0
+                    avg_error = 1000
 
-                    sock.sendall(b'<SET ID="CALIBRATE_RESET" STATE="1" />\r\n')
-
-                    for x, y in points_9:
-                        sock.sendall(f'<SET ID="CALIBRATE_ADDPOINT" X="{x}" Y="{y}" />\r\n'.encode())
-                        
-                    sock.sendall(b'<SET ID="CALIBRATE_SHOW" STATE="1" />\r\n')
-                    sock.sendall(b'<SET ID="CALIBRATE_START" STATE="1" />\r\n')
-                    print("[GP] Calibration started")
-                    await asyncio.sleep(30) # hqrd coded - todo: check if the values are okey
-
-                    sock.sendall(b'<SET ID="CALIBRATE_SHOW" STATE="0" />\r\n')
-
-                    sock.sendall(b'<GET ID="CALIBRATE_RESULT_SUMMARY" STATE="1" />\r\n')
-                    print("we asked for the calibration results")
-
-                    buf = ""
-                    while True:
-                        chunk = sock.recv(8024).decode('utf-8')
-                        buf += chunk 
-                        if "CALIBRATE_RESULT_SUMMARY" in buf:
-                            response = chunk 
+                    boolean = True
+                    while boolean:
+                        if avg_error > 1:
+                            print("i send it again to calibrate ")
+                            avg_error, valid_points = calibrate_eval()
+                            times += 1
+                            
+                        elif times > 2:
+                            print("it is tqking too long, mqke sure the eyetrackers position is okey") 
                             break
 
-                    # this also seems to work - todo: find the way to get the average error and the number of valid points
-                    print("the response is ", response, type(response))
-
-
-                    pattern = r'<ACK[^>]*ID="CALIBRATE_RESULT_SUMMARY"[^>]*/>'
-
-                    match = re.search(pattern, buf)
-
-                    if match:
-                        root = ET.fromstring(match.group(0))
-
-                        if root.attrib.get("ID") == "CALIBRATE_RESULT_SUMMARY":
-                            avg_error = int(root.attrib["AVE_ERROR"])
-                            valid_points = int(root.attrib["VALID_POINTS"])
-
-                            print(avg_error)
-                            print(valid_points)
-
+                            
                 elif cmd == "stop":
                     stop_event.set()
                     break
