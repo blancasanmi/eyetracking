@@ -146,13 +146,21 @@ async def handler(ws):
 
                     # this also seems to work - todo: find the way to get the average error and the number of valid points
                     print("the response is ", response, type(response))
-                    root = ET.fromstring(response)
-                    avg_error = root.attrib["AVE_ERROR"]
-                    valid_points = root.attrib["VALID_POINTS"]
 
-                    print(avg_error)
-                    print(valid_points)
 
+                    pattern = r'<ACK[^>]*ID="CALIBRATE_RESULT_SUMMARY"[^>]*/>'
+
+                    match = re.search(pattern, buf)
+
+                    if match:
+                        root = ET.fromstring(match.group(0))
+
+                        if root.attrib.get("ID") == "CALIBRATE_RESULT_SUMMARY":
+                            avg_error = int(root.attrib["AVE_ERROR"])
+                            valid_points = int(root.attrib["VALID_POINTS"])
+
+                            print(avg_error)
+                            print(valid_points)
 
                 elif cmd == "stop":
                     stop_event.set()
