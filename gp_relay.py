@@ -183,12 +183,15 @@ async def handler(ws):
                     while boolean:
                         if avg_error > 1:
                             print("i send it again to calibrate ")
-                            avg_error, valid_points = calibrate_eval()
+                            avg_error, valid_points = await calibrate_eval()
                             times += 1
                             
                         elif times > 2:
                             print("it is tqking too long, mqke sure the eyetrackers position is okey") 
-                            break
+                            boolean = False
+
+                        else: 
+                            boolean = False
 
                             
                 elif cmd == "stop":
