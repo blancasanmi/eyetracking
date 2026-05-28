@@ -136,10 +136,22 @@ async def handler(ws):
                     sock.sendall(b'<GET ID="CALIBRATE_RESULT_SUMMARY" STATE="1" />\r\n')
                     print("we asked for the calibration results")
 
+                    buf = ""
+                    while True:
+                        chunk = sock.recv(8024).decode('utf-8')
+                        buf += chunk 
+                        if "CALIBRATE_RESULT_SUMMARY" in buf:
+                            response = chunk 
+                            break
+
                     # this also seems to work - todo: find the way to get the average error and the number of valid points
-                    response = sock.recv(1024).decode('utf-8')
-                    print(response)
-                    root= ET.fromstring
+                    print("the response is ", response, type(response))
+                    root = ET.fromstring(response)
+                    avg_error = root.attrib["AVE_ERROR"]
+                    valid_points = root.attrib["VALID_POINTS"]
+
+                    print(avg_error)
+                    print(valid_points)
 
 
                 elif cmd == "stop":
