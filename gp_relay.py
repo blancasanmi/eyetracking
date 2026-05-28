@@ -104,7 +104,8 @@ async def handler(ws):
                     await ws.send(json.dumps({"type": "gaze", "data": rec}))
                     sample_count += 1
                     if sample_count % 500 == 0:
-                        print(f"  [GP] {sample_count} gaze samples forwarded")
+                        # print(f"  [GP] {sample_count} gaze samples forwarded")
+                        break
                 except websockets.ConnectionClosed:
                     stop_event.set()
                     return
@@ -133,8 +134,6 @@ async def handler(ws):
 
         sock.sendall(b'<SET ID="CALIBRATE_SHOW" STATE="0" />\r\n')
 
-        sock.sendall(b'<GET ID="CALIBRATE_RESULT_SUMMARY" STATE="1" />\r\n')
-
         timeout = 5
         start = asyncio.get_event_loop().time()
 
@@ -145,6 +144,7 @@ async def handler(ws):
                 if msg.get("ID") == "CALIBRATE_RESULT_SUMMARY":
                     avg_error = float(msg["AVE_ERROR"])
                     valid_points = float(msg["VALID_POINTS"])
+                    print(avg_error, valid_points)
                     return avg_error, valid_points
 
             except queue.Empty:
@@ -154,9 +154,6 @@ async def handler(ws):
                 raise TimeoutError("No calibration ACK received")
 
             await asyncio.sleep(0.01)
-
-        return avg_error, valid_points
-
 
 
     async def receive_commands():
@@ -171,20 +168,17 @@ async def handler(ws):
                 elif cmd == "calibrate":
                     
                     times = 0
-                    avg_error = 1000
+                    avg_error = 1000.0
 
                     boolean = True
                     while boolean:
-                        if avg_error > 1:
+                        if avg_error > 1.0 and times != 2:
                             print("i send it again to calibrate ")
                             avg_error, valid_points = await calibrate_eval()
+                            print("i do get the qvg error and the other", avg_error)
                             times += 1
-                            
-                        elif times > 2:
-                            print("it is tqking too long, mqke sure the eyetrackers position is okey") 
-                            boolean = False
-
                         else: 
+                            print("stopped because the values are good enough or because we are spending too much time")
                             boolean = False
 
                             
