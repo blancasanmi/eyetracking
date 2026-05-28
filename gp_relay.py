@@ -23,32 +23,37 @@ WS_HOST = "localhost"
 WS_PORT = 8765
 
 
-def gaze_reader_thread(sock, gaze_queue, stop_event):
-    """Blocking TCP reader in its own thread. Parses <REC .../> and queues dicts."""
+def gaze_reader_thread(sock, gaze_queue, ack_queue, stop_event):
     buf = ""
-    pattern = re.compile(r'<REC\s[^>]*/>')
+
+    rec_pattern = re.compile(r'<REC\s[^>]*/>')
+    ack_pattern = re.compile(r'<ACK\s[^>]*/>')
+
     while not stop_event.is_set():
-        try:
-            chunk = sock.recv(8192)
-            if not chunk:
-                break
-            buf += chunk.decode("utf-8", errors="ignore")
-
-            last_end = 0
-            for m in pattern.finditer(buf):
-                try:
-                    el = ET.fromstring(m.group())
-                    gaze_queue.put(dict(el.attrib))
-                except ET.ParseError:
-                    pass
-                last_end = m.end()
-            if last_end:
-                buf = buf[last_end:]
-
-        except socket.timeout:
-            continue
-        except OSError:
+        chunk = sock.recv(8192)
+        if not chunk:
             break
+
+        buf += chunk.decode("utf-8", errors="ignore")
+
+        # REC parsing
+        for m in rec_pattern.finditer(buf):
+            try:
+                el = ET.fromstring(m.group())
+                gaze_queue.put(dict(el.attrib))
+            except ET.ParseError:
+                pass
+
+        # ACK parsing
+        for m in ack_pattern.finditer(buf):
+            try:
+                el = ET.fromstring(m.group())
+                ack_queue.put(dict(el.attrib))
+            except ET.ParseError:
+                pass
+
+        # cleanup buffer safely
+        buf = buf[-4096:]
 
     print("[THREAD] Gaze reader stopped")
 
@@ -73,10 +78,11 @@ async def handler(ws):
     print("[GP] Data streaming enabled")
 
     gaze_queue = queue.Queue()
+    ack_queue = queue.Queue()
     stop_event = threading.Event()
     reader = threading.Thread(
         target=gaze_reader_thread,
-        args=(sock, gaze_queue, stop_event),
+        args=(sock, gaze_queue, ack_queue, stop_event),
         daemon=True
     )
     reader.start()
@@ -127,39 +133,27 @@ async def handler(ws):
 
         sock.sendall(b'<SET ID="CALIBRATE_SHOW" STATE="0" />\r\n')
 
-    
-        buf = ""
-        buf2 = ""
+        sock.sendall(b'<GET ID="CALIBRATE_RESULT_SUMMARY" STATE="1" />\r\n')
+
+        timeout = 5
+        start = asyncio.get_event_loop().time()
+
         while True:
-            chunk = sock.recv(8024).decode('utf-8')
-            chunk2 = sock.recv(1024).decode('utf-8')
+            try:
+                msg = ack_queue.get_nowait()
 
-            buf += chunk 
-            buf2 += chunk2
-            if "CALIBRATE_RESULT_SUMMARY" in buf:
-                response = chunk 
-                break
-            if "CALIBRATE_RESULT_SUMMARY" in buf2:
-                response = chunk 
-                break
+                if msg.get("ID") == "CALIBRATE_RESULT_SUMMARY":
+                    avg_error = float(msg["AVE_ERROR"])
+                    valid_points = float(msg["VALID_POINTS"])
+                    return avg_error, valid_points
 
-        # this also seems to work - todo: find the way to get the average error and the number of valid points
-        print("the response is ", response, type(response))
+            except queue.Empty:
+                pass
 
+            if asyncio.get_event_loop().time() - start > timeout:
+                raise TimeoutError("No calibration ACK received")
 
-        pattern = r'<ACK[^>]*ID="CALIBRATE_RESULT_SUMMARY"[^>]*/>'
-
-        match = re.search(pattern, response)
-
-        if match:
-            root = ET.fromstring(match.group(0))
-
-            if root.attrib.get("ID") == "CALIBRATE_RESULT_SUMMARY":
-                avg_error = float(root.attrib["AVE_ERROR"])
-                valid_points = float(root.attrib["VALID_POINTS"])
-
-                print("avg_error", avg_error)
-                print("valid_points", valid_points)
+            await asyncio.sleep(0.01)
 
         return avg_error, valid_points
 
