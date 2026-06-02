@@ -172,7 +172,7 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                 try:
                     await ws.send(json.dumps({"type": "gaze", "data": rec}))
                     sample_count += 1
-                    if sample_count % 500 == 0:
+                    if sample_count % 5000 == 0:
                         print(f"  [GP] {sample_count} gaze samples forwarded")
                 except websockets.ConnectionClosed:
                     stop_event.set()
