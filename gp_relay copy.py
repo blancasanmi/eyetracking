@@ -31,22 +31,18 @@ GP_PORT   = 4242
 WS_HOST   = "localhost"
 WS_PORT   = 8765
 
-LOGFILE   = f"gaze_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.tsv"
+LOGFILE   = f"gaze_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
 
-# Calibration points (normalised 0-1, origin = top-left)
 CALIB_POINTS: list[tuple[float, float]] = [
     (0.5,  0.1),
     (0.05, 0.5), (0.5, 0.5), (0.95, 0.5),
     (0.5,  0.9),
 ]
 
-MAX_CALIB_ATTEMPTS  = 3
+MAX_CALIB_ATTEMPTS  = 2
 CALIB_ERROR_THRESH  = 1.0   # average error threshold to accept calibration
 CALIB_TIMEOUT_S     = 30.0  # seconds to wait for calibration to finish
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _build_rec_dict(tracker: OpenGazeTracker) -> dict | None:
     """
@@ -78,7 +74,7 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
     tracker.calibrate_start(True)
     print("[GP] Calibration started")
 
-    await asyncio.sleep(30)
+    await asyncio.sleep(CALIB_TIMEOUT_S)  # TODO: the values are hard-coded, check how to change this
 
     # # Wait for the tracker to finish (poll for CALIB_RESULT)
     # deadline = time.monotonic() + CALIB_TIMEOUT_S
@@ -103,10 +99,6 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
     return avg_error, valid_points
 
 
-# ---------------------------------------------------------------------------
-# WebSocket handler (one per browser connection)
-# ---------------------------------------------------------------------------
-
 async def handler(ws: websockets.WebSocketServerProtocol) -> None:
     print("[WS] Browser connected")
 
@@ -118,33 +110,28 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
     stop_event = asyncio.Event()
     sample_count = 0
 
-    # ------------------------------------------------------------------
-    # Task: forward gaze samples to browser
-    # ------------------------------------------------------------------
-    async def forward_gaze() -> None:
-        nonlocal sample_count
-        tracker.start_recording()
 
-        while not stop_event.is_set():
-            rec = _build_rec_dict(tracker)
-            if rec is not None:
-                try:
-                    await ws.send(json.dumps({"type": "gaze", "data": rec}))
-                    sample_count += 1
-                    if sample_count % 500 == 0:
-                        # print(f"  [GP] {sample_count} gaze samples forwarded")
-                        continue
-                except websockets.ConnectionClosed:
-                    stop_event.set()
-                    return
+    # async def forward_gaze() -> None:
+    #     nonlocal sample_count
+    #     tracker.start_recording()
 
-            await asyncio.sleep(0.005)   # ~200 Hz ceiling
+    #     while not stop_event.is_set():
+    #         rec = _build_rec_dict(tracker)
+    #         if rec is not None:
+    #             try:
+    #                 await ws.send(json.dumps({"type": "gaze", "data": rec}))
+    #                 sample_count += 1
+    #                 if sample_count % 500 == 0:
+    #                     # print(f"  [GP] {sample_count} gaze samples forwarded")
+    #                     continue
+    #             except websockets.ConnectionClosed:
+    #                 stop_event.set()
+    #                 return
 
-        tracker.stop_recording()
+    #         await asyncio.sleep(0.005)   # ~200 Hz ceiling
 
-    # ------------------------------------------------------------------
-    # Task: receive commands from the browser
-    # ------------------------------------------------------------------
+    #     tracker.stop_recording()
+
     async def receive_commands() -> None:
         try:
             async for raw in ws:
@@ -184,6 +171,7 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                             }))
                             break
                     else:
+                        tracker.stop_recording()
                         await ws.send(json.dumps({
                             "type":         "calibration_done",
                             "avg_error":    avg_error,
@@ -191,27 +179,22 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                             "attempts":     attempts,
                         }))
 
+
                 elif cmd == "stop":
+                    tracker.stop_recording()
                     stop_event.set()
                     break
 
         except websockets.ConnectionClosed:
             stop_event.set()
 
-    # ------------------------------------------------------------------
-    # Run both tasks; clean up on exit
-    # ------------------------------------------------------------------
     try:
-        await asyncio.gather(forward_gaze(), receive_commands())
+        await asyncio.gather(receive_commands()) # forward_gaze(),
     finally:
         stop_event.set()
         tracker.close()
         print(f"[WS] Session ended — {sample_count} total gaze samples sent")
 
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 async def main() -> None:
     print(f"[WS] Relay listening on ws://{WS_HOST}:{WS_PORT}")
