@@ -137,20 +137,32 @@ class OpenGazeTracker:
         self._outthread.start()
 
         # ENABLE ALL DATA FIELDS
-        time.sleep(0.5)
-        self.enable_send_counter(True)
-        self.enable_send_cursor(True)
-        self.enable_send_eye_left(True)
-        self.enable_send_eye_right(True)
-        self.enable_send_pog_best(True)
-        self.enable_send_pog_fix(True)
-        self.enable_send_pog_left(True)
-        self.enable_send_pog_right(True)
-        self.enable_send_pupil_left(True)
-        self.enable_send_pupil_right(True)
-        self.enable_send_time(True)
-        self.enable_send_time_tick(True)
-        self.enable_send_user_data(True)
+        # FIX: Batch all enable_send_* messages without waiting for individual
+        # ACKs — each waited up to 3 s before, making init take 30-40 s total.
+        # We fire them all without ACK, give the server a short window to
+        # process them, then do a single confirmed send (user_data) to verify
+        # the connection is alive before returning.
+        time.sleep(0.1)
+
+        _fire = lambda ID, val=1: self._send_message(
+            "SET", ID, values=[("STATE", val)],
+            wait_for_acknowledgement=False,
+        )
+        _fire("ENABLE_SEND_COUNTER")
+        _fire("ENABLE_SEND_CURSOR")
+        _fire("ENABLE_SEND_EYE_LEFT")
+        _fire("ENABLE_SEND_EYE_RIGHT")
+        _fire("ENABLE_SEND_POG_BEST")
+        _fire("ENABLE_SEND_POG_FIX")
+        _fire("ENABLE_SEND_POG_LEFT")
+        _fire("ENABLE_SEND_POG_RIGHT")
+        _fire("ENABLE_SEND_PUPIL_LEFT")
+        _fire("ENABLE_SEND_PUPIL_RIGHT")
+        _fire("ENABLE_SEND_TIME")
+        _fire("ENABLE_SEND_TIME_TICK")
+        _fire("ENABLE_SEND_USER_DATA")
+
+        # Single confirmed send to flush and verify the connection.
         self.user_data("0")
 
     # -----------------------------------------------------------------------
@@ -260,91 +272,105 @@ class OpenGazeTracker:
     def enable_send_data(self, state: bool) -> bool:
         """Start (True) or stop (False) streaming of data from the server."""
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_DATA", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_DATA", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
     def enable_send_counter(self, state: bool) -> bool:
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_COUNTER", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_COUNTER", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
     def enable_send_time(self, state: bool) -> bool:
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_TIME", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_TIME", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
     def enable_send_time_tick(self, state: bool) -> bool:
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_TIME_TICK", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_TIME_TICK", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
     def enable_send_pog_fix(self, state: bool) -> bool:
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_POG_FIX", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_POG_FIX", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
     def enable_send_pog_left(self, state: bool) -> bool:
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_POG_LEFT", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_POG_LEFT", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
     def enable_send_pog_right(self, state: bool) -> bool:
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_POG_RIGHT", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_POG_RIGHT", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
     def enable_send_pog_best(self, state: bool) -> bool:
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_POG_BEST", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_POG_BEST", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
     def enable_send_pupil_left(self, state: bool) -> bool:
         """Enable/disable left pupil data (LPCX, LPCY, LPD, LPS, LPV)."""
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_PUPIL_LEFT", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_PUPIL_LEFT", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
     def enable_send_pupil_right(self, state: bool) -> bool:
         """Enable/disable right pupil data (RPCX, RPCY, RPD, RPS, RPV)."""
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_PUPIL_RIGHT", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_PUPIL_RIGHT", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
     def enable_send_eye_left(self, state: bool) -> bool:
         """Enable/disable 3D left eye data (LEYEX/Y/Z, LPUPILD, LPUPILV)."""
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_EYE_LEFT", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_EYE_LEFT", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
     def enable_send_eye_right(self, state: bool) -> bool:
         """Enable/disable 3D right eye data (REYEX/Y/Z, RPUPILD, RPUPILV)."""
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_EYE_RIGHT", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_EYE_RIGHT", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
     def enable_send_cursor(self, state: bool) -> bool:
         """Enable/disable mouse cursor data (CX, CY, CS)."""
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_CURSOR", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_CURSOR", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
     def enable_send_user_data(self, state: bool) -> bool:
         """Enable/disable user-defined variable in the data record."""
         ack, timeout = self._send_message(
-            "SET", "ENABLE_SEND_USER_DATA", values=[("STATE", int(state))]
+            "SET", "ENABLE_SEND_USER_DATA", values=[("STATE", int(state))],
+            resend_timeout=0.5, maxwait=2.0,
         )
         return ack and not timeout
 
@@ -747,8 +773,8 @@ class OpenGazeTracker:
         ID: str,
         values: list[tuple[str, object]] | None = None,
         wait_for_acknowledgement: bool = True,
-        resend_timeout: float = 3.0,
-        maxwait: float = 9.0,
+        resend_timeout: float = 1.0,   # FIX: was 3.0 — tighter retry window
+        maxwait: float = 3.0,          # FIX: was 9.0 — tighter overall timeout
     ) -> tuple[bool, bool]:
         msg = self._format_msg(command, ID, values=values)
         acknowledged = False

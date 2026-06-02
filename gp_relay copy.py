@@ -42,6 +42,7 @@ CALIB_POINTS: list[tuple[float, float]] = [
 MAX_CALIB_ATTEMPTS  = 2
 CALIB_ERROR_THRESH  = 1.0   # average error threshold to accept calibration
 CALIB_TIMEOUT_S     = 30.0  # seconds to wait for calibration to finish
+CALIB_POLL_INTERVAL = 0.2   # seconds between calibration result checks
 
 
 def _build_rec_dict(tracker: OpenGazeTracker) -> dict | None:
@@ -74,25 +75,26 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
     tracker.calibrate_start(True)
     print("[GP] Calibration started")
 
-    await asyncio.sleep(CALIB_TIMEOUT_S)  # TODO: the values are hard-coded, check how to change this
-
-    # # Wait for the tracker to finish (poll for CALIB_RESULT)
-    # deadline = time.monotonic() + CALIB_TIMEOUT_S
-    # while time.monotonic() < deadline:
-    #     result = tracker.get_calibration_result()
-    #     if result is not None:
-    #         break
-    #     await asyncio.sleep(0.2)
-    # else:
-    #     tracker.calibrate_show(False)
-    #     tracker.calibrate_start(False)
-    #     raise TimeoutError("Calibration timed out — no result received")
+    # FIX: Poll for the calibration result instead of sleeping for the full
+    # CALIB_TIMEOUT_S unconditionally. This returns as soon as the tracker
+    # reports a result, which is typically much faster than the worst-case
+    # timeout and avoids an unnecessary 30-second stall every calibration.
+    deadline = time.monotonic() + CALIB_TIMEOUT_S
+    result = None
+    while time.monotonic() < deadline:
+        result = tracker.get_calibration_result()
+        if result is not None:
+            break
+        await asyncio.sleep(CALIB_POLL_INTERVAL)
 
     tracker.calibrate_show(False)
     tracker.calibrate_start(False)
 
+    if result is None:
+        raise TimeoutError("Calibration timed out — no result received")
+
     avg_error_str, valid_points_str = tracker.calibrate_result_summary()
-    avg_error    = float(avg_error_str)    if avg_error_str    is not None else 9999.0
+    avg_error    = float(avg_error_str)         if avg_error_str    is not None else 9999.0
     valid_points = int(float(valid_points_str)) if valid_points_str is not None else 0
 
     print(f"[GP] Calibration result: avg_error={avg_error:.4f}  valid_points={valid_points}")
@@ -109,28 +111,6 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
 
     stop_event = asyncio.Event()
     sample_count = 0
-
-
-    # async def forward_gaze() -> None:
-    #     nonlocal sample_count
-    #     tracker.start_recording()
-
-    #     while not stop_event.is_set():
-    #         rec = _build_rec_dict(tracker)
-    #         if rec is not None:
-    #             try:
-    #                 await ws.send(json.dumps({"type": "gaze", "data": rec}))
-    #                 sample_count += 1
-    #                 if sample_count % 500 == 0:
-    #                     # print(f"  [GP] {sample_count} gaze samples forwarded")
-    #                     continue
-    #             except websockets.ConnectionClosed:
-    #                 stop_event.set()
-    #                 return
-
-    #         await asyncio.sleep(0.005)   # ~200 Hz ceiling
-
-    #     tracker.stop_recording()
 
     async def receive_commands() -> None:
         try:
@@ -179,7 +159,6 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                             "attempts":     attempts,
                         }))
 
-
                 elif cmd == "stop":
                     tracker.stop_recording()
                     stop_event.set()
@@ -189,7 +168,7 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
             stop_event.set()
 
     try:
-        await asyncio.gather(receive_commands()) # forward_gaze(),
+        await asyncio.gather(receive_commands())
     finally:
         stop_event.set()
         tracker.close()
