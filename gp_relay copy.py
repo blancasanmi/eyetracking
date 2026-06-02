@@ -30,7 +30,7 @@ GP_PORT   = 4242
 WS_HOST   = "localhost"
 WS_PORT   = 8765
 
-LOGFILE   = f"gaze_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.tsv"
+LOGFILE   = f"gaze_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
 
 CALIB_POINTS: list[tuple[float, float]] = [
     (0.5,  0.1),
@@ -100,8 +100,8 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
     tracker.clear_calibration_result()
     tracker.calibrate_reset()
 
-    for x, y in CALIB_POINTS:
-        tracker.calibrate_addpoint(x, y)
+    # for x, y in CALIB_POINTS:
+    #     tracker.calibrate_addpoint(x, y)
 
     tracker.calibrate_show(True)
     tracker.calibrate_start(True)
