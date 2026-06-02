@@ -171,6 +171,13 @@
     }
   }
 
+  function stopExperiment() {
+    if (ws && connected) {
+      ws.send(JSON.stringify({ cmd: "stop" }));
+      ws.close();
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════
   //  jsPsych EXPERIMENT
   // ═══════════════════════════════════════════════════════════════
@@ -343,6 +350,7 @@ timeline.push({
       showGazeDot = false;
       const dot = document.getElementById("gaze-dot");
       if (dot) dot.style.display = "none";
+      stopExperiment();
     }
   });
 
