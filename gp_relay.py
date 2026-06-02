@@ -16,11 +16,15 @@ import threading
 import queue
 import re
 import xml.etree.ElementTree as ET
+from opengaze import OpenGazeTracker
 
 GP_HOST = "127.0.0.1"
 GP_PORT = 4242
 WS_HOST = "localhost"
 WS_PORT = 8765
+
+tracker = OpenGazeTracker(ip=GP_HOST, port=GP_PORT, logfile='gaze_data.csv') 
+# TODO: change the logfile to capture name and time of the session 
 
 
 def gaze_reader_thread(sock, gaze_queue, ack_queue, stop_event):
@@ -126,7 +130,7 @@ async def handler(ws):
         sock.sendall(b'<SET ID="CALIBRATE_SHOW" STATE="1" />\r\n')
         sock.sendall(b'<SET ID="CALIBRATE_START" STATE="1" />\r\n')
         print("[GP] Calibration started")
-        await asyncio.sleep(30) # hqrd coded - todo: check if the values are okey
+        await asyncio.sleep(30) # TODO: the values are hard-coded, check how to change this
 
         sock.sendall(b'<GET ID="CALIBRATE_RESULT_SUMMARY" STATE="1" />\r\n')
         print("we asked for the calibration results")
