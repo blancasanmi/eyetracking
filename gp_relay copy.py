@@ -132,6 +132,8 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
     result = await _wait_for_calibration_result(tracker)
 
     # Only close the window once we have (or have given up waiting for) the result.
+
+    await asyncio.sleep(5.0) # added to wait a bit before closing the calibration window, to avoid cutting it off before the result is sent by the server.
     tracker.calibrate_show(False)
     tracker.calibrate_start(False)
 
