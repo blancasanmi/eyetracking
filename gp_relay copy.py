@@ -41,8 +41,8 @@ CALIB_POINTS: list[tuple[float, float]] = [
 
 MAX_CALIB_ATTEMPTS  = 2
 CALIB_ERROR_THRESH  = 1.0   # average error threshold to accept calibration
-CALIB_TIMEOUT_S     = 30.0  # seconds to wait for calibration to finish
-CALIB_POLL_INTERVAL = 0.2   # seconds between calibration result checks
+CALIB_TIMEOUT_S     = 60.0  # seconds to wait for calibration to finish
+CALIB_POLL_INTERVAL = 0.5   # seconds between calibration result checks
 
 
 def _build_rec_dict(tracker: OpenGazeTracker) -> dict | None:
@@ -151,7 +151,7 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                             }))
                             break
                     else:
-                        tracker.stop_recording()
+                        tracker.start_recording()
                         await ws.send(json.dumps({
                             "type":         "calibration_done",
                             "avg_error":    avg_error,
