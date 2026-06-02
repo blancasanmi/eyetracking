@@ -237,7 +237,7 @@
     }
   });
 
-  // ── 2. Calibration ────────────────────────────────────────────
+// ── 2. Calibration ────────────────────────────────────────────
 
   timeline.push({
     type: jsPsychHtmlButtonResponse,
@@ -249,36 +249,41 @@
         <p>Click below to start calibration.</p>
       </div>
     `,
-    choices: ["Start Calibration"],
-    on_finish: () => {
-      startCalibration();
-    }
+    choices: ["Start Calibration"]
+    // Removed startCalibration() from here to prevent the race condition
   });
 
-// instead of pressing the space bar, if it is alright, it goes to the next
-timeline.push({
+  timeline.push({
     type: jsPsychCallFunction,
     async: true,
     func: function(done) {
-        // Listen for calibration result from relay
-        const originalOnMessage = ws.onmessage;
-        ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data);
-            
-            if (msg.type === "calibration_result") {
-                ws.onmessage = originalOnMessage; // restore
-                
-                // Parse quality — Gazepoint returns average error in degrees
-                // Good calibration is typically < 0.5 degrees
-                console.log("[CALIB] Result:", msg.data);
-                done();
-            } else {
-                // Still pass gaze data through during calibration
-                originalOnMessage(event);
-            }
-        };
+      // 1. Capture the original handler before changing it
+      const originalOnMessage = ws.onmessage;
+      
+      // 2. Set up the dynamic listener first
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        
+        // Fix: Check for 'calibration_done' instead of 'calibration_result'
+        if (msg.type === "calibration_done" || msg.type === "calibration_result") {
+          console.log("[CALIB] Complete structure received:", msg.data);
+          
+          // Restore original listener safely
+          ws.onmessage = originalOnMessage; 
+          done(); // Tell jsPsych to move forward
+        } else {
+          // Pass normal data packets through to avoid losing samples during tracking setup
+          if (typeof originalOnMessage === "function") {
+            originalOnMessage(event);
+          }
+        }
+      };
+
+      // 3. Fire the command NOW that our ears are open
+      console.log("[CALIB] Launching calibration routine...");
+      startCalibration();
     }
-});
+  });
 
   // ── 3. Gaze check (show dot so participant can verify) ────────
 
