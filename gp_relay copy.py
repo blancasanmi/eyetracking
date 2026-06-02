@@ -78,17 +78,19 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
     tracker.calibrate_start(True)
     print("[GP] Calibration started")
 
-    # Wait for the tracker to finish (poll for CALIB_RESULT)
-    deadline = time.monotonic() + CALIB_TIMEOUT_S
-    while time.monotonic() < deadline:
-        result = tracker.get_calibration_result()
-        if result is not None:
-            break
-        await asyncio.sleep(0.2)
-    else:
-        tracker.calibrate_show(False)
-        tracker.calibrate_start(False)
-        raise TimeoutError("Calibration timed out — no result received")
+    await asyncio.sleep(30)
+
+    # # Wait for the tracker to finish (poll for CALIB_RESULT)
+    # deadline = time.monotonic() + CALIB_TIMEOUT_S
+    # while time.monotonic() < deadline:
+    #     result = tracker.get_calibration_result()
+    #     if result is not None:
+    #         break
+    #     await asyncio.sleep(0.2)
+    # else:
+    #     tracker.calibrate_show(False)
+    #     tracker.calibrate_start(False)
+    #     raise TimeoutError("Calibration timed out — no result received")
 
     tracker.calibrate_show(False)
     tracker.calibrate_start(False)
@@ -130,7 +132,8 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                     await ws.send(json.dumps({"type": "gaze", "data": rec}))
                     sample_count += 1
                     if sample_count % 500 == 0:
-                        print(f"  [GP] {sample_count} gaze samples forwarded")
+                        # print(f"  [GP] {sample_count} gaze samples forwarded")
+                        continue
                 except websockets.ConnectionClosed:
                     stop_event.set()
                     return
