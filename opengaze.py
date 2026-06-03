@@ -62,7 +62,7 @@ class OpenGazeTracker:
         self._debug_print(f"Connecting to {self.host} ({self.port})...")
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.connect((self.host, self.port))
-        self._sock.settimeout(1.0)
+        self._sock.settimeout(0.5)  # FIX: reduced from 1.0 for faster feedback
         self._debug_print("Successfully connected!")
         self._maxrecvsize = 4096
         self._socklock = Lock()
@@ -383,6 +383,7 @@ class OpenGazeTracker:
         """Start (True) or stop (False) the calibration procedure."""
         self._current_calibration_point = 0 if state else None
         # Send without waiting for ACK to avoid blocking the caller/UI.
+        # If waiting becomes necessary, use short timeouts to minimize lag.
         self._send_message(
             "SET", "CALIBRATE_START", values=[("STATE", int(state))],
             wait_for_acknowledgement=False,
@@ -392,6 +393,7 @@ class OpenGazeTracker:
     def calibrate_show(self, state: bool) -> bool:
         """Show (True) or hide (False) the calibration window."""
         # Do not wait for ACK here to keep the call non-blocking.
+        # If waiting becomes necessary, use short timeouts to minimize lag.
         self._send_message(
             "SET", "CALIBRATE_SHOW", values=[("STATE", int(state))],
             wait_for_acknowledgement=False,
@@ -430,7 +432,11 @@ class OpenGazeTracker:
 
     def calibrate_reset(self) -> bool:
         """Reset the internal list of calibration points to defaults."""
-        ack, timeout = self._send_message("SET", "CALIBRATE_RESET", values=None)
+        # Shorter timeouts for calibration to reduce startup lag.
+        ack, timeout = self._send_message(
+            "SET", "CALIBRATE_RESET", values=None,
+            resend_timeout=0.2, maxwait=0.5,
+        )
         return ack and not timeout
 
     def calibrate_addpoint(self, x: float, y: float) -> bool:

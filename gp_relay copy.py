@@ -79,18 +79,29 @@ async def _wait_for_calibration_result(
 
 
 async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
+    t0 = time.monotonic()
     
     tracker.clear_calibration_result()
+    t_step = time.monotonic()
+    print(f"  [TIME] clear_calibration_result: {t_step - t0:.3f}s")
+    
     # calibrate_reset() can block while waiting for an ACK from the tracker.
     # Run it in the default thread pool to avoid stalling the asyncio loop.
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, lambda: tracker.calibrate_reset())
+    t_step = time.monotonic()
+    print(f"  [TIME] calibrate_reset: {t_step - t0:.3f}s")
 
     # for x, y in CALIB_POINTS:
     #     tracker.calibrate_addpoint(x, y)
 
     tracker.calibrate_show(True)
+    t_step = time.monotonic()
+    print(f"  [TIME] calibrate_show: {t_step - t0:.3f}s")
+    
     tracker.calibrate_start(True)
+    t_step = time.monotonic()
+    print(f"  [TIME] calibrate_start: {t_step - t0:.3f}s")
     print("[GP] Calibration started")
 
     # wait_for_calibration_point_start() is a blocking call (uses time.sleep
