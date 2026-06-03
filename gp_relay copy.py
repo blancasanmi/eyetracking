@@ -30,20 +30,21 @@ GP_PORT   = 4242
 WS_HOST   = "localhost"
 WS_PORT   = 8765
 
-LOGFILE   = f"gaze_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+LOGFILE   = f"gaze_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.tsv"
 
+# Custom 9-point calibration grid.
+# calibrate_reset() sets the server back to its built-in default list, then
+# calibrate_addpoint() calls REPLACE that list one point at a time.
 CALIB_POINTS: list[tuple[float, float]] = [
     (0.05, 0.1), (0.5, 0.1), (0.95, 0.1),
     (0.05, 0.5), (0.5, 0.5), (0.95, 0.5),
     (0.05, 0.9), (0.5, 0.9), (0.95, 0.9),
 ]
 
-
-
 MAX_CALIB_ATTEMPTS   = 2
-CALIB_ERROR_THRESH   = 20.0   # accept calibration below this average error
-CALIB_POINT_TIMEOUT  = 15.0  # seconds to wait per calibration point
-CALIB_RESULT_TIMEOUT = 10.0  # seconds to wait for final result after last point
+CALIB_ERROR_THRESH   = 20.0
+CALIB_POINT_TIMEOUT  = 15.0   # seconds to wait per calibration point
+CALIB_RESULT_TIMEOUT = 10.0   # seconds to wait for final result after last point
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -79,29 +80,34 @@ async def _wait_for_calibration_result(
 
 async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
     """
-    Run one full calibration pass:
-      1. Reset + add points
-      2. Show window + start calibration
-      3. Wait for every point to start (confirms the sequence is live)
-      4. Wait for CALIB_RESULT to arrive  (server signals completion)
-      5. Hide window + stop calibration
-      6. Return (avg_error, valid_points)
+    Run one full calibration pass with custom CALIB_POINTS.
 
-    Raises TimeoutError if any point or the final result times out.
+    Point-list management
+    ---------------------
+    The OpenGaze API has two distinct commands:
+      - CALIBRATE_RESET  : restores the server's built-in default point list.
+      - CALIBRATE_CLEAR  : clears the *calibration result*, not the point list.
+      - CALIBRATE_ADDPOINT: APPENDS one point to the current list.
 
-    Why this order matters
-    ----------------------
-    calibrate_start() / calibrate_show() are acknowledged immediately by the
-    server, but the actual measurement runs asynchronously.  Closing the
-    window before the result arrives corrupts the session.  We therefore:
-      - use wait_for_calibration_point_start() (run in a thread executor so it
-        doesn't block asyncio) to confirm each point has actually started, and
-      - only then poll for the CALIB_RESULT before hiding the window.
+    To use a fully custom list we therefore:
+      1. calibrate_reset()    — wipe the default list so we start clean.
+      2. calibrate_addpoint() — add each of our own points.
+    Using calibrate_clear() here would only erase the previous result and
+    leave the default points in place, causing the server to run its own
+    sequence instead of ours.
+
+    Timing
+    ------
+    calibrate_start/show are acknowledged immediately but measurement is
+    async.  We use wait_for_calibration_point_start() (in a thread executor)
+    to confirm each point has fired, then poll for CALIB_RESULT before
+    closing the window.
     """
-    # Clear any stale result so we don't read it as the new one.
+    # Erase any stale result so we don't mistake it for the new one.
     tracker.clear_calibration_result()
-    tracker.calibrate_clear()
 
+    # Reset to defaults first, then replace with our custom points.
+    tracker.calibrate_reset()
     for x, y in CALIB_POINTS:
         tracker.calibrate_addpoint(x, y)
 
@@ -109,19 +115,18 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
     tracker.calibrate_start(True)
     print("[GP] Calibration started")
 
-    # wait_for_calibration_point_start() is a blocking call (uses time.sleep
-    # internally), so run it in a thread pool to keep the event loop alive.
     loop = asyncio.get_running_loop()
 
     for i, _ in enumerate(CALIB_POINTS, start=1):
+        # Default-argument captures the current value of i, avoiding the
+        # classic loop-closure bug with lambdas.
         pt_nr, pos = await loop.run_in_executor(
             None,
-            lambda: tracker.wait_for_calibration_point_start(
+            lambda idx=i: tracker.wait_for_calibration_point_start(
                 timeout=CALIB_POINT_TIMEOUT
             ),
         )
         if pt_nr is None:
-            # Safe to abort: hide window before raising.
             tracker.calibrate_show(False)
             tracker.calibrate_start(False)
             raise TimeoutError(
@@ -129,13 +134,12 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
             )
         print(f"  [CALIB] Point {pt_nr} at {pos}")
 
-    # All points collected — now wait for the server to send CALIB_RESULT.
     print("[GP] All points collected — waiting for calibration result...")
     result = await _wait_for_calibration_result(tracker)
 
-    # Only close the window once we have (or have given up waiting for) the result.
-
-    await asyncio.sleep(2.0) # added to wait a bit before closing the calibration window, to avoid cutting it off before the result is sent by the server.
+    # Brief pause so the server finishes writing the result before we
+    # close the window (empirically needed on some GP firmware versions).
+    await asyncio.sleep(2.0)
     tracker.calibrate_show(False)
     tracker.calibrate_start(False)
 
@@ -165,9 +169,6 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
     stop_event = asyncio.Event()
     sample_count = 0
 
-    # ------------------------------------------------------------------
-    # Task: forward gaze samples to the browser
-    # ------------------------------------------------------------------
     async def forward_gaze() -> None:
         nonlocal sample_count
         while not stop_event.is_set():
@@ -181,11 +182,8 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                 except websockets.ConnectionClosed:
                     stop_event.set()
                     return
-            await asyncio.sleep(0.005)   # ~200 Hz ceiling
+            await asyncio.sleep(0.005)
 
-    # ------------------------------------------------------------------
-    # Task: receive commands from the browser
-    # ------------------------------------------------------------------
     async def receive_commands() -> None:
         try:
             async for raw in ws:
@@ -226,7 +224,6 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                             }))
                             break
                     else:
-                        # while…else: loop exited because avg_error <= threshold.
                         tracker.start_recording()
                         await ws.send(json.dumps({
                             "type":         "calibration_done",
@@ -243,9 +240,6 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
         except websockets.ConnectionClosed:
             stop_event.set()
 
-    # ------------------------------------------------------------------
-    # Run both tasks concurrently; clean up on exit
-    # ------------------------------------------------------------------
     try:
         await asyncio.gather(forward_gaze(), receive_commands())
     finally:
