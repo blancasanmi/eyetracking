@@ -38,6 +38,8 @@ CALIB_POINTS: list[tuple[float, float]] = [
     (0.05, 0.9), (0.5, 0.9), (0.95, 0.9),
 ]
 
+
+
 MAX_CALIB_ATTEMPTS   = 2
 CALIB_ERROR_THRESH   = 20.0   # accept calibration below this average error
 CALIB_POINT_TIMEOUT  = 15.0  # seconds to wait per calibration point
