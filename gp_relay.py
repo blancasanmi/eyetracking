@@ -187,7 +187,7 @@ async def handler(ws):
 
                             
                 elif cmd == "stop":
-                    tracker.stop_recording()
+                    tracker.stop_recording
                     stop_event.set()
                     break
         except websockets.ConnectionClosed:

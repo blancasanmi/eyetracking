@@ -33,13 +33,13 @@ WS_PORT   = 8765
 LOGFILE   = f"gaze_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
 
 CALIB_POINTS: list[tuple[float, float]] = [
-    (0.5,  0.1),
+    (0.05, 0.1), (0.5, 0.1), (0.95, 0.1),
     (0.05, 0.5), (0.5, 0.5), (0.95, 0.5),
-    (0.5,  0.9),
+    (0.05, 0.9), (0.5, 0.9), (0.95, 0.9),
 ]
 
 MAX_CALIB_ATTEMPTS   = 2
-CALIB_ERROR_THRESH   = 45.0   # accept calibration below this average error
+CALIB_ERROR_THRESH   = 20.0   # accept calibration below this average error
 CALIB_POINT_TIMEOUT  = 15.0  # seconds to wait per calibration point
 CALIB_RESULT_TIMEOUT = 10.0  # seconds to wait for final result after last point
 
@@ -98,10 +98,10 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
     """
     # Clear any stale result so we don't read it as the new one.
     tracker.clear_calibration_result()
-    tracker.calibrate_reset()
+    tracker.calibrate_clear()
 
-    # for x, y in CALIB_POINTS:
-    #     tracker.calibrate_addpoint(x, y)
+    for x, y in CALIB_POINTS:
+        tracker.calibrate_addpoint(x, y)
 
     tracker.calibrate_show(True)
     tracker.calibrate_start(True)
