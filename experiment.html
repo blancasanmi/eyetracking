@@ -282,6 +282,7 @@
       // 3. Fire the command NOW that our ears are open
       console.log("[CALIB] Launching calibration routine...");
       startCalibration();
+      sendTrigger("calibration_start");
     }
   });
 
