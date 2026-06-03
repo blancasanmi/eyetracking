@@ -177,7 +177,8 @@ class OpenGazeTracker:
         result = None
         while result is None:
             result = self.get_calibration_result()
-            time.sleep(0.1)
+            # shorter sleep to reduce perceived trigger lag while polling
+            time.sleep(0.01)
         self.calibrate_show(False)
         return result
 
@@ -381,17 +382,21 @@ class OpenGazeTracker:
     def calibrate_start(self, state: bool) -> bool:
         """Start (True) or stop (False) the calibration procedure."""
         self._current_calibration_point = 0 if state else None
-        ack, timeout = self._send_message(
-            "SET", "CALIBRATE_START", values=[("STATE", int(state))]
+        # Send without waiting for ACK to avoid blocking the caller/UI.
+        self._send_message(
+            "SET", "CALIBRATE_START", values=[("STATE", int(state))],
+            wait_for_acknowledgement=False,
         )
-        return ack and not timeout
+        return True
 
     def calibrate_show(self, state: bool) -> bool:
         """Show (True) or hide (False) the calibration window."""
-        ack, timeout = self._send_message(
-            "SET", "CALIBRATE_SHOW", values=[("STATE", int(state))]
+        # Do not wait for ACK here to keep the call non-blocking.
+        self._send_message(
+            "SET", "CALIBRATE_SHOW", values=[("STATE", int(state))],
+            wait_for_acknowledgement=False,
         )
-        return ack and not timeout
+        return True
 
     def calibrate_timeout(self, value: float) -> bool:
         """Set calibration point duration in seconds."""
