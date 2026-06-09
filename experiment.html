@@ -9,6 +9,8 @@
   <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet"/>
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
   <link rel="stylesheet" href="style.css" type="text/css">
+  <script src="sentences.js"></script>
+
   <style>
     /* ── Sentence display ─────────────────────────────────────── */
     .sentence-container {
@@ -78,11 +80,7 @@
   //  CONFIGURATION
   // ═══════════════════════════════════════════════════════════════
 
-  (async () => {
-
   const WS_URL = "ws://localhost:8765";
-
-  const SENTENCES = await fetch("sentences.json").then(r => r.json());
 
   const SHOW_GAZE_DOT = true;
 
@@ -448,8 +446,6 @@
 
   // ── Run ────────────────────────────────────────────────────────
   jsPsych.run(timeline);
-
-  })(); // End async IIFE
 
   </script>
 </body>
