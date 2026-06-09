@@ -78,6 +78,8 @@
   //  CONFIGURATION
   // ═══════════════════════════════════════════════════════════════
 
+  (async () => {
+
   const WS_URL = "ws://localhost:8765";
 
   const SENTENCES = await fetch("sentences.json").then(r => r.json());
@@ -446,6 +448,8 @@
 
   // ── Run ────────────────────────────────────────────────────────
   jsPsych.run(timeline);
+
+  })(); // End async IIFE
 
   </script>
 </body>
