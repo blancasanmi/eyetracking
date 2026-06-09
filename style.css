@@ -1,0 +1,48 @@
+#frst{
+    color: palevioletred;
+    position: fixed;
+    top:   20%;
+    left:  15%;
+    right: 15%;
+}
+
+
+#frstIns{
+    color: palevioletred;
+}
+
+ /*position: absolute;
+    top:   25%;
+    left:  15%;
+    right: 15%;*/
+
+#prompt{
+    color: black;
+}
+
+
+
+#scnd{
+    color: blue;
+    position: fixed;
+    top:   35%;
+    left:  15%;
+    right: 15%;
+}
+
+#scndIns{
+    color: blue;
+}
+
+
+#thrd{
+    position: fixed;
+    top:   55%;
+    left:  15%;
+    right: 15%;
+}
+
+
+/* fix sentences to screen position something like: absolute;
+  top: 52%;
+  ;*/
