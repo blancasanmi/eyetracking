@@ -209,19 +209,17 @@
     type: jsPsychHtmlButtonResponse,
     stimulus: `
       <div class="instructions">
-        <h2>Eye-Tracking Reading Experiment</h2>
-        <p>This experiment tracks your eye movements while you read sentences.</p>
-        <p><strong>Before starting:</strong></p>
+        <h2>Expérience de lecture avec suivi eye-tracker</h2>
+        <p>Cette expérience enregistre les mouvements de vos yeux pendant que vous lisez des phrases.</p>
+        <p><strong>Avant de commencer :</strong></p>
         <ol>
-          <li>Make sure <em>Gazepoint Control</em> is running</li>
-          <li>Make sure <em>gp_relay.py</em> is running</li>
-          <li>Sit comfortably ~60 cm from the screen</li>
+          <li>Asseyez-vous confortablement à environ 60 cm de l’écran</li>
         </ol>
-        <p>Click below to connect to the eye tracker.</p>
+        <p>Cliquez ci-dessous pour vous connecter au dispositif eye-tracker.</p>
       </div>
     `,
-    choices: ["Connect to Eye Tracker"],
-    on_finish: () => {} // connection happens in next trial
+    choices: ["Se Connecter"],
+    on_finish: () => {} // la connexion s'effectue lors de l'essai suivant
   });
 
   timeline.push({
@@ -239,18 +237,19 @@
 
 // ── 2. Calibration ────────────────────────────────────────────
 
-  timeline.push({
+    timeline.push({
     type: jsPsychHtmlButtonResponse,
     stimulus: `
       <div class="instructions">
         <h2>Calibration</h2>
-        <p>A calibration screen will appear in the <strong>Gazepoint Control</strong> window.</p>
-        <p>Follow the moving dot with your eyes (not your head).</p>
-        <p>Click below to start calibration.</p>
+        <p>Un écran de calibration apparaîtra dans la fenêtre.</p>
+        <p>Suivez le point en mouvement avec vos yeux (sans bouger la tête).</p>
+        <p>Si la calibration échoue, une deuxième tentative sera effectuée.</p>
+        <p>Si celle ci échoue également, l'expérience sera interrompue. Appelez alors l'administrateur.</p>
       </div>
     `,
-    choices: ["Start Calibration"]
-    // Removed startCalibration() from here to prevent the race condition
+    choices: ["Démarrer la calibration"]
+    // startCalibration() a été retiré d'ici pour éviter la condition de concurrence (race condition)
   });
 
   timeline.push({
@@ -292,10 +291,11 @@
     type: jsPsychHtmlKeyboardResponse,
     stimulus: `
       <div class="instructions">
-        <h2>Gaze Check</h2>
-        <p>You should see a <span style="color:red;">red dot</span> following your gaze.</p>
-        <p>Look around the screen to verify tracking is working.</p>
-        <p>Press <strong>SPACE</strong> when ready to begin.</p>
+        <h2>Vérification du suivi oculaire</h2>
+        <p>Vous devriez voir un <span style="color:red;">point rouge</span> suivre votre regard.</p>
+        <p>Regardez différentes zones de l’écran pour vérifier que le suivi fonctionne correctement.</p>
+        <p>Le point disparaîtra une fois l'expérience commencée.</p>
+        <p>Appuyez sur la touche <strong>ESPACE</strong> lorsque vous êtes prêt(e) à commencer.</p>
       </div>
     `,
     choices: [" "],
