@@ -218,7 +218,7 @@
         <p>Cliquez ci-dessous pour vous connecter au dispositif eye-tracker.</p>
       </div>
     `,
-    choices: ["Se Connecter"],
+    choices: [" "],
     on_finish: () => {} // la connexion s'effectue lors de l'essai suivant
   });
 
@@ -248,7 +248,7 @@
         <p>Si celle ci échoue également, l'expérience sera interrompue. Appelez alors l'administrateur.</p>
       </div>
     `,
-    choices: ["Démarrer la calibration"]
+    choices: [" "]
     // startCalibration() a été retiré d'ici pour éviter la condition de concurrence (race condition)
   });
 
@@ -350,7 +350,7 @@
         <p>Thank you. Your data is being saved.</p>
       </div>
     `,
-    choices: ["Finish"],
+    choices: [" "],
     on_start: () => {
       sendTrigger("experiment_end");
       showGazeDot = false;
