@@ -207,27 +207,33 @@
   timeline.push({
     type: jsPsychCallFunction,
     async: true,
-    func: async function (done) {
-      try {
-        // Load the consent form HTML
-        const response = await fetch('consent-form-information.html');
-        const consentHTML = await response.text();
-        
-        // Replace the jsPsych content with the consent form
-        document.body.innerHTML = consentHTML;
-        
-        // Get the continue button and add event listener
-        const continueBtn = document.getElementById('continue_btn');
-        if (continueBtn) {
-          continueBtn.addEventListener('click', () => {
-            // Once consent is given, proceed with the experiment
+    func: function(done) {
+      // Inject Bootstrap directly
+      const bootstrapLink = document.createElement('link');
+      bootstrapLink.rel = 'stylesheet';
+      bootstrapLink.href = 'https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css';
+      document.head.appendChild(bootstrapLink);
+
+      // Extract and inject just the body content
+      fetch('consent-form-information.html')
+        .then(r => r.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          const bodyContent = doc.body.innerHTML;
+
+          // Inject into jsPsych's display element (safe — doesn't wipe jsPsych)
+          const display = jsPsych.getDisplayElement();
+          display.innerHTML = bodyContent;
+
+          // "Je consens" button → proceed
+          document.getElementById('continue_btn').addEventListener('click', () => {
+            display.innerHTML = '';
             done();
           });
-        }
-      } catch (e) {
-        console.error("Error loading consent form:", e);
-        done(); // Continue anyway if there's an error
-      }
+
+          // "Non merci" button → redirect to Prolific (already handled inline in the HTML)
+        });
     }
   });
   // ── 1. Connect to relay ────────────────────────────────────────
