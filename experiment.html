@@ -206,7 +206,7 @@
   // ── 1. Connect to relay ────────────────────────────────────────
 
   timeline.push({
-    type: jsPsychHtmlButtonResponse,
+    type: jsPsychHtmlKeyboardResponse,
     stimulus: `
       <div class="instructions">
         <h2>Expérience de lecture avec suivi eye-tracker</h2>
@@ -215,7 +215,7 @@
         <ol>
           <li>Asseyez-vous confortablement à environ 60 cm de l’écran</li>
         </ol>
-        <p>Cliquez ci-dessous pour vous connecter au dispositif eye-tracker.</p>
+        <p>Cliquez sur la touche <strong>ESPACE</strong> pour continuer.</p>
       </div>
     `,
     choices: [" "],
@@ -238,14 +238,16 @@
 // ── 2. Calibration ────────────────────────────────────────────
 
     timeline.push({
-    type: jsPsychHtmlButtonResponse,
+    type: jsPsychHtmlKeyboardResponse,
     stimulus: `
       <div class="instructions">
         <h2>Calibration</h2>
         <p>Un écran de calibration apparaîtra dans la fenêtre.</p>
-        <p>Suivez le point en mouvement avec vos yeux (sans bouger la tête).</p>
+        <p>Suivez le point en mouvement avec vos yeux (sans bouger la tête) et sans prédire où il va.</p>
         <p>Si la calibration échoue, une deuxième tentative sera effectuée.</p>
-        <p>Si celle ci échoue également, l'expérience sera interrompue. Appelez alors l'administrateur.</p>
+        <p>Si celle ci échoue également, l'expérience sera interrompue</p>
+        <p>Appelez alors l'administrateur</p>
+        <p>Appuyez sur la touche <strong>ESPACE</strong> pour lancer la calibration.</p>
       </div>
     `,
     choices: [" "]
@@ -343,11 +345,11 @@
   // ── 5. End ────────────────────────────────────────────────────
 
   timeline.push({
-    type: jsPsychHtmlButtonResponse,
+    type: jsPsychHtmlKeyboardResponse,
     stimulus: `
       <div class="instructions">
-        <h2>Done!</h2>
-        <p>Thank you. Your data is being saved.</p>
+        <h2>L'expérience est terminée!</h2>
+        <p>Merci pour votre participation!</p>
       </div>
     `,
     choices: [" "],
