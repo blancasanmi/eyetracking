@@ -202,7 +202,34 @@
   });
 
   const timeline = [];
+  // ── 0. Consent Form ────────────────────────────────────────────
 
+  timeline.push({
+    type: jsPsychCallFunction,
+    async: true,
+    func: async function (done) {
+      try {
+        // Load the consent form HTML
+        const response = await fetch('consent-form-information.html');
+        const consentHTML = await response.text();
+        
+        // Replace the jsPsych content with the consent form
+        document.body.innerHTML = consentHTML;
+        
+        // Get the continue button and add event listener
+        const continueBtn = document.getElementById('continue_btn');
+        if (continueBtn) {
+          continueBtn.addEventListener('click', () => {
+            // Once consent is given, proceed with the experiment
+            done();
+          });
+        }
+      } catch (e) {
+        console.error("Error loading consent form:", e);
+        done(); // Continue anyway if there's an error
+      }
+    }
+  });
   // ── 1. Connect to relay ────────────────────────────────────────
 
   timeline.push({
