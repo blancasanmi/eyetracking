@@ -80,11 +80,7 @@
 
   const WS_URL = "ws://localhost:8765";
 
-  const SENTENCES = [
-    "The curious cat slowly climbed the ancient oak tree in the garden",
-    "Every morning she walked to the bakery and bought fresh bread",
-    "Scientists discovered a new species of butterfly in the Amazon forest"
-  ];
+  const SENTENCES = await fetch("sentences.json").then(r => r.json());
 
   const SHOW_GAZE_DOT = true;
 
