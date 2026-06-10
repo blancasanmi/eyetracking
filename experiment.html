@@ -392,7 +392,7 @@
 
   // Fixation cross before each sentence
   function makeSentenceTrial(sentence, index) {
-    const trialId = `sentence_${index}`;
+    const trialId = `${index}`;
 
     // Fixation cross
     timeline.push({
@@ -421,9 +421,34 @@
     });
   }
 
-  // Add all sentence trials
-  SENTENCES.forEach((s, i) => makeSentenceTrial(s, i));
+  // todo: we want to add comprehension questions 
+  function makeCatchTrial(sentence, sentidx, catchidx) {
+    const question = `Avez-vous vu la phrase suivante ?<br><br><em>${sentence}</em>`;
+    timeline.push({
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `
+        <div class="sentence-container">
+          <div class="sentence-text">${question}</div>
+        </div>
+      `,
+      choices: ["Oui", "Non"],
+      data: { task: "catch", sentence: sentence, trial_index: catchidx },
+      on_start: () => sendTrigger(`catch_onset_${catchidx}`),
+      on_finish: (data) => {
+        sendTrigger(`catch_offset_${catchidx}`);
+        data.response_label = data.response === 0 ? "Vrai" : "Faux";
+      }
+    });
+  }
 
+  // Add all sentence trials
+  // catchIdx = 0;
+  // for (let sentidx = 0; sentidx < SENTENCES.length; sentidx++) {
+  //   if (sentidx % 10 === 0) {
+  //     makeCatchTrial(SENTENCES[sentidx], sentidx, catchIdx++);
+  //   }
+  //   makeSentenceTrial(SENTENCES[sentidx], sentidx);
+  // }
   // ── 5. End ────────────────────────────────────────────────────
 
   timeline.push({

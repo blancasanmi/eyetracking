@@ -97,3 +97,10 @@ const SENTENCES = [
   "Mara a bientôt un examen de la plus haute importance. Elle passe toutes ses journées à la bibliothèque.",
   "Magnus doit rejoindre son ami pour prendre un café, il décide de regarder l'heure sur son portable. Magnus sort son téléphone mais sa batterie est à plat."
 ];
+
+
+const sent_length = [
+  "Léo ouvre son cadeau et sourit avec joie.",
+   "Sarah attend son train depuis plusieurs minutes lorsqu'une musicienne commence à jouer du violon sur le quai. Les voyageurs s'arrêtent un instant pour écouter cette mélodie apaisante.",
+   "Thomas se promène dans le centre-ville après une longue journée de travail lorsqu'il remarque une petite librairie qu'il n'avait jamais vue auparavant. Curieux, il entre et parcourt les rayons remplis de romans et d'essais. Après quelques minutes, il découvre un livre qui correspond parfaitement à ses centres d'intérêt et décide de l'acheter immédiatement pour le lire pendant le week-end."
+]
