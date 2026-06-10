@@ -19,17 +19,85 @@
       justify-content: center;
       height: 100vh;
       width: 100vw;
-      padding: 40px;
+      padding: 60px;
       box-sizing: border-box;
     }
+
     .sentence-text {
       font-family: 'Courier New', monospace;
-      font-size: 64px;
-      line-height: 1.6;
-      letter-spacing: 4px;
+      font-size: 36px;           /* reduced from 64px */
+      line-height: 1.8;
+      letter-spacing: 2px;
       text-align: center;
       color: #111;
-      max-width: 90vw;
+      max-width: 85vw;
+    }
+
+    /* ── Catch trial ──────────────────────────────────────────── */
+    .catch-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      width: 100vw;
+      padding: 60px;
+      box-sizing: border-box;
+      gap: 40px;
+    }
+
+    .catch-label {
+      font-family: 'Courier New', monospace;
+      font-size: 18px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #888;
+    }
+
+    .catch-question {
+      font-family: 'Courier New', monospace;
+      font-size: 22px;
+      line-height: 1.8;
+      text-align: center;
+      color: #111;
+      max-width: 80vw;
+    }
+
+    .catch-sentence {
+      font-style: italic;
+      color: #333;
+    }
+
+    /* ── Catch trial buttons ──────────────────────────────────── */
+    .jspsych-btn {
+      font-family: 'Courier New', monospace !important;
+      font-size: 20px !important;
+      padding: 18px 60px !important;
+      border-radius: 4px !important;
+      margin: 0 20px !important;
+      border: 2px solid transparent !important;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    /* Oui = calm blue */
+    .jspsych-btn:first-child {
+      background-color: #2c5f8a !important;
+      color: #fff !important;
+      border-color: #2c5f8a !important;
+    }
+    .jspsych-btn:first-child:hover {
+      background-color: #1e4060 !important;
+    }
+
+    /* Non = neutral grey */
+    .jspsych-btn:last-child {
+      background-color: #fff !important;
+      color: #333 !important;
+      border-color: #aaa !important;
+    }
+    .jspsych-btn:last-child:hover {
+      background-color: #f0f0f0 !important;
     }
 
     /* ── Gaze cursor overlay ──────────────────────────────────── */
@@ -45,7 +113,6 @@
       display: none;
     }
 
-    /* ── Calibration targets ──────────────────────────────────── */
     .calib-dot {
       position: fixed;
       width: 30px;
@@ -57,9 +124,9 @@
     }
 
     .instructions {
-      font-size: 24px;
+      font-size: 22px;
       max-width: 800px;
-      line-height: 1.6;
+      line-height: 1.7;
     }
 
     /* ── Consent form ─────────────────────────────────────────── */
@@ -81,8 +148,8 @@
   // ═══════════════════════════════════════════════════════════════
 
   const WS_URL = "ws://localhost:8765";
-
   const SHOW_GAZE_DOT = true;
+  const CATCH_EVERY_N = 10; 
 
   // ═══════════════════════════════════════════════════════════════
   //  WEBSOCKET + GAZE HANDLING
@@ -107,42 +174,23 @@
   function connectGazePoint() {
     return new Promise((resolve, reject) => {
       ws = new WebSocket(WS_URL);
-
-      ws.onopen = () => {
-        connected = true;
-        console.log("[GP] WebSocket connected");
-        resolve();
-      };
-
-      ws.onerror = (e) => {
-        console.error("[GP] WebSocket error", e);
-        reject(e);
-      };
-
-      ws.onclose = () => {
-        connected = false;
-        console.log("[GP] WebSocket closed");
-      };
-
+      ws.onopen = () => { connected = true; console.log("[GP] WebSocket connected"); resolve(); };
+      ws.onerror = (e) => { console.error("[GP] WebSocket error", e); reject(e); };
+      ws.onclose = () => { connected = false; console.log("[GP] WebSocket closed"); };
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if (msg.type === "gaze" && msg.data) {
           const d = msg.data;
           const sample = {
-            fpogx: parseFloat(d.FPOGX),
-            fpogy: parseFloat(d.FPOGY),
-            fpogd: parseFloat(d.FPOGD || 0),
-            fpogv: parseInt(d.FPOGV || 0),
+            fpogx: parseFloat(d.FPOGX), fpogy: parseFloat(d.FPOGY),
+            fpogd: parseFloat(d.FPOGD || 0), fpogv: parseInt(d.FPOGV || 0),
             fpogid: parseInt(d.FPOGID || 0),
-            bpogx: parseFloat(d.BPOGX || d.FPOGX),
-            bpogy: parseFloat(d.BPOGY || d.FPOGY),
+            bpogx: parseFloat(d.BPOGX || d.FPOGX), bpogy: parseFloat(d.BPOGY || d.FPOGY),
             bpogv: parseInt(d.BPOGV || 0),
-            time: parseFloat(d.TIME || 0),
-            user_data: d.USER_DATA || "",
+            time: parseFloat(d.TIME || 0), user_data: d.USER_DATA || "",
             local_ts: performance.now()
           };
           gazeLog.push(sample);
-
           if (SHOW_GAZE_DOT && showGazeDot) {
             const dot = ensureGazeDot();
             if (sample.fpogv) {
@@ -166,16 +214,11 @@
   }
 
   function startCalibration() {
-    if (ws && connected) {
-      ws.send(JSON.stringify({ cmd: "calibrate" }));
-    }
+    if (ws && connected) ws.send(JSON.stringify({ cmd: "calibrate" }));
   }
 
   function stopExperiment() {
-    if (ws && connected) {
-      ws.send(JSON.stringify({ cmd: "stop" }));
-      ws.close();
-    }
+    if (ws && connected) { ws.send(JSON.stringify({ cmd: "stop" })); ws.close(); }
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -184,11 +227,7 @@
 
   const jsPsych = initJsPsych({
     on_finish: function () {
-      const results = {
-        jspsych: jsPsych.data.get().json(),
-        gaze: gazeLog
-      };
-
+      const results = { jspsych: jsPsych.data.get().json(), gaze: gazeLog };
       if (typeof jatos !== "undefined") {
         jatos.submitResultData(JSON.stringify(results), jatos.startNextComponent);
       } else {
@@ -216,61 +255,46 @@
             <div align="left" class="legal well">
               <p align="center"><strong>Feuille d'information pour les participants</strong></p>
               <p>Titre de l'étude : <strong>Suspense: Analyse à l'eye-tracker</strong></p>
-
               <p>
                 Nous souhaitons vous inviter à participer à ce projet de recherche qui porte sur l'évaluation de suspense dans la lecture.<br>
                 L'expérience va durer environ 1 heure. Nous vous demanderons de faire certaines ou toutes les choses suivantes lors de l'expérience :<br>
                 1) Lire des séquences de phrases<br>
                 2) Répondre à des questionnaires<br>
               </p>
-
               <p><strong>Chercheurs</strong></p>
               <p>Blanca San Millan Peralta, étudiante en Master Intelligence Artificielle et Société à Université PSL, Université Panthéon-Sorbonne, uncertaintysuspense@gmail.com<br>
                 Dr. Bastien Blain, Centre d'économie de la Sorbonne, Université Panthéon-Sorbonne, uncertaintysuspense@gmail.com
               </p>
-
               <p><strong>Rémunération du participant / Paiement du sujet</strong></p>
               <p>La participation à ce projet de recherche est volontaire.</p>
-
               <p><strong>Droits du sujet et retrait de l'étude</strong></p>
-              <p>Vous devez participer à cette étude uniquement si vous le souhaitez ; choisir de ne pas participer ne vous désavantagera en aucune façon et vous ne subirez aucune pénalité. Avant de décider si vous souhaitez participer, veuillez lire attentivement cette feuille d'information. N'hésitez pas à en discuter avec d'autres personnes si vous le souhaitez. Demandez-nous s'il y a quelque chose qui n'est pas clair ou si vous souhaitez obtenir plus d'informations. Si vous acceptez de participer, veuillez remplir le formulaire de consentement ci-dessous. Après avoir signé ce formulaire de consentement et accepté de participer, vous pouvez encore vous retirer à tout moment sans donner de raisons.</p>
-
+              <p>Vous devez participer à cette étude uniquement si vous le souhaitez ; choisir de ne pas participer ne vous désavantagera en aucune façon et vous ne subirez aucune pénalité. Avant de décider si vous souhaitez participer, veuillez lire attentivement cette feuille d'information. Si vous acceptez de participer, veuillez remplir le formulaire de consentement ci-dessous. Après avoir signé ce formulaire de consentement et accepté de participer, vous pouvez encore vous retirer à tout moment sans donner de raisons.</p>
               <p><strong>Avis de protection des données et de la confidentialité</strong></p>
-              <p>Vos données sont anonymes et stockées en toute sécurité sur un serveur du CNRS. Si nous sommes en mesure d'anonymiser ou de pseudonymiser vos données personnelles, nous le ferons et nous nous efforcerons de minimiser le traitement de vos données personnelles chaque fois que cela est possible.</p>
-
+              <p>Vos données sont anonymes et stockées en toute sécurité sur un serveur du CNRS.</p>
               <p><strong>Confidentialité</strong></p>
-              <p>Il est prévu que la recherche proposée ne génère pas de résultats exploitables commercialement. Les informations suivantes pourraient également être obtenues : le genre, la date de naissance, le niveau d'éducation. Afin que vos données restent anonymes, un code y sera attaché. Ainsi, vous ne serez pas identifiable dans la rédaction ou toute autre publication/présentation qui pourrait résulter de cette étude.</p>
-
+              <p>Afin que vos données restent anonymes, un code y sera attaché. Ainsi, vous ne serez pas identifiable dans la rédaction ou toute autre publication/présentation qui pourrait résulter de cette étude.</p>
               <p align="center"><strong>FORMULAIRE DE CONSENTEMENT</strong></p>
               <p><strong>Titre de l'étude</strong>: Suspense: Analyse à l'eye-tracker</p>
-              <p><strong>Department</strong>: Sorbonne Economic Center, Pantheon-Sorbonne University, Paris</p>
-              <p><strong>Nom et Contact du Chercheur</strong>: Blanca San Millan Peralta, Master Intelligence Artificielle et Société, Université PSL and Pantheon-Sorbonne University, blanca.sanmillanperalta@psl.eu</p>
-              <p><strong>Nom et Contact du Superviseur</strong>: Dr. Bastien Blain, Sorbonne Economic Center, Pantheon-Sorbonne University, uncertaintysuspense@gmail.com</p>
-
-              <p>Nous vous remercions de considérer une potentielle participation à cette recherche. La personne organisant l'étude doit vous expliquer le projet avant que vous acceptiez de participer. Si vous avez des questions découlant de la fiche d'information ou de l'explication qui vous a déjà été donnée, veuillez les poser au chercheur avant de décider si vous souhaitez participer. Une copie de ce formulaire de consentement vous sera remise pour que vous puissiez la conserver et vous y référer à tout moment.</p>
-
+              <p><strong>Nom et Contact du Chercheur</strong>: Blanca San Millan Peralta, blanca.sanmillanperalta@psl.eu</p>
+              <p><strong>Nom et Contact du Superviseur</strong>: Dr. Bastien Blain, uncertaintysuspense@gmail.com</p>
               <ol>
-                <li>Je confirme avoir lu et compris la fiche d'information pour l'étude. J'ai eu l'occasion de considérer les informations et ce qui est attendu de moi. J'ai également eu la possibilité de poser des questions auxquelles j'ai reçu des réponses claires.</li>
-                <br><li>Je consens à participer à l'étude. Je comprends que mes informations personnelles seront utilisées aux fins qui m'ont été expliquées.</li>
-                <br><li>Je comprends que toutes les informations personnelles resteront confidentielles et que tous les efforts seront déployés pour que je ne sois pas identifiable.</li>
-                <br><li>Je comprends que mes données recueillies dans cette étude seront stockées de manière anonyme et sécurisée. Il ne sera pas possible de m'identifier dans les publications.</li>
-                <br><li>Je comprends les risques potentiels de ma participation et je suis conscient du soutien qui me sera offert si je suis en détresse pendant le cours de la recherche.</li>
+                <li>Je confirme avoir lu et compris la fiche d'information pour l'étude.</li>
+                <br><li>Je consens à participer à l'étude.</li>
+                <br><li>Je comprends que toutes les informations personnelles resteront confidentielles.</li>
+                <br><li>Je comprends que mes données recueillies seront stockées de manière anonyme et sécurisée.</li>
+                <br><li>Je comprends les risques potentiels de ma participation.</li>
                 <br><li>Aucune promesse ou garantie de bénéfices ne m'a été faite pour m'encourager à participer.</li>
-                <br><li>Je comprends que les données ne seront pas mises à la disposition d'organisations commerciales mais sont exclusivement la responsabilité du ou des chercheurs qui entreprennent cette étude.</li>
-                <br><li>Je comprends que je ne bénéficierai pas financièrement de cette étude ou de tout résultat possible qui en découlerait à l'avenir.</li>
+                <br><li>Je comprends que les données ne seront pas mises à la disposition d'organisations commerciales.</li>
+                <br><li>Je comprends que je ne bénéficierai pas financièrement de cette étude.</li>
                 <br><li>Je comprends que je serai indemnisé pour la partie du temps consacrée à l'étude (si applicable).</li>
-                <br><li>J'accepte que mes données anonymisées puissent être utilisées par d'autres pour des recherches futures (personne ne pourra vous identifier lorsque ces données seront partagées).</li>
+                <br><li>J'accepte que mes données anonymisées puissent être utilisées par d'autres pour des recherches futures.</li>
                 <br><li>Je comprends que les informations que j'ai fournies pourront être publiées dans un rapport.</li>
                 <br><li>Je confirme que je comprends les critères d'inclusion tels que détaillés dans la fiche d'information.</li>
                 <br><li>Je sais qui je dois contacter si je souhaite déposer une plainte.</li>
-                <br><li>Je suis d'accord que mes données soient archivées. Je comprends que d'autres chercheurs authentifiés de l'Université Panthéon-Sorbonne auront accès à mes données anonymisées.</li>
+                <br><li>Je suis d'accord que mes données soient archivées.</li>
               </ol>
-
-              <button type="button" class="btn btn-default btn-sm" onClick="window.print();">
-                Imprimer une copie
-              </button>
+              <button type="button" class="btn btn-default btn-sm" onClick="window.print();">Imprimer une copie</button>
             </div>
-
             <br>
             <center>
               <button type="button" class="btn btn-primary btn-lg" id="continue_btn">Je consens</button>
@@ -281,14 +305,13 @@
           </div>
         </div>
       `;
-
       document.getElementById('continue_btn').addEventListener('click', () => {
         display.innerHTML = '';
         done();
       });
     }
   });
-  
+
   // ── 1. Connect to relay ────────────────────────────────────────
 
   timeline.push({
@@ -297,30 +320,25 @@
       <div class="instructions">
         <h2>Expérience de lecture avec suivi eye-tracker</h2>
         <p>Cette expérience enregistre les mouvements de vos yeux pendant que vous lisez des phrases.</p>
-        <p><strong>Avant de commencer :</strong> Asseyez-vous confortablement à environ 60 cm de l’écran</p>
-        <p>Cliquez sur la touche <strong>ESPACE</strong> pour continuer.</p>
+        <p><strong>Avant de commencer :</strong> Asseyez-vous confortablement à environ 60 cm de l'écran.</p>
+        <p>Appuyez sur <strong>ESPACE</strong> pour continuer.</p>
       </div>
     `,
-    choices: [" "],
-    on_finish: () => {} // la connexion s'effectue lors de l'essai suivant
+    choices: [" "]
   });
 
   timeline.push({
     type: jsPsychCallFunction,
     async: true,
     func: async function (done) {
-      try {
-        await connectGazePoint();
-        done({ success: true });
-      } catch (e) {
-        done({ success: false, error: e.message });
-      }
+      try { await connectGazePoint(); done({ success: true }); }
+      catch (e) { done({ success: false, error: e.message }); }
     }
   });
 
-// ── 2. Calibration ────────────────────────────────────────────
+  // ── 2. Calibration ────────────────────────────────────────────
 
-    timeline.push({
+  timeline.push({
     type: jsPsychHtmlKeyboardResponse,
     stimulus: `
       <div class="instructions">
@@ -328,9 +346,8 @@
         <p>Un écran de calibration apparaîtra dans la fenêtre.</p>
         <p>Suivez le point en mouvement avec vos yeux (sans bouger la tête) et sans prédire où il va.</p>
         <p>Si la calibration échoue, une deuxième tentative sera effectuée.</p>
-        <p>Si celle ci échoue également, l'expérience sera interrompue.</p>
-        <p>Appelez alors l'administrateur.</p>
-        <p>Appuyez sur la touche <strong>ESPACE</strong> pour lancer la calibration et attendez 2 secondes.</p>
+        <p>Si celle-ci échoue également, l'expérience sera interrompue. Appelez alors l'administrateur.</p>
+        <p>Appuyez sur <strong>ESPACE</strong> pour lancer la calibration et attendez 2 secondes.</p>
       </div>
     `,
     choices: [" "]
@@ -340,36 +357,24 @@
     type: jsPsychCallFunction,
     async: true,
     func: function(done) {
-      // 1. Capture the original handler before changing it
       const originalOnMessage = ws.onmessage;
-      
-      // 2. Set up the dynamic listener first
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
-        
-        // Fix: Check for 'calibration_done' instead of 'calibration_result'
         if (msg.type === "calibration_done" || msg.type === "calibration_result") {
-          console.log("[CALIB] Complete structure received:", msg.data);
-          
-          // Restore original listener safely
-          ws.onmessage = originalOnMessage; 
-          done(); // Tell jsPsych to move forward
+          console.log("[CALIB] Complete:", msg.data);
+          ws.onmessage = originalOnMessage;
+          done();
         } else {
-          // Pass normal data packets through to avoid losing samples during tracking setup
-          if (typeof originalOnMessage === "function") {
-            originalOnMessage(event);
-          }
+          if (typeof originalOnMessage === "function") originalOnMessage(event);
         }
       };
-
-      // 3. Fire the command NOW that our ears are open
-      console.log("[CALIB] Launching calibration routine...");
+      console.log("[CALIB] Launching...");
       startCalibration();
       sendTrigger("calibration_start");
     }
   });
 
-  // ── 3. Gaze check (show dot so participant can verify) ────────
+  // ── 3. Gaze check ─────────────────────────────────────────────
 
   timeline.push({
     type: jsPsychHtmlKeyboardResponse,
@@ -377,33 +382,28 @@
       <div class="instructions">
         <h2>Vérification du suivi oculaire</h2>
         <p>Vous devriez voir un <span style="color:red;">point rouge</span> suivre votre regard.</p>
-        <p>Regardez différentes zones de l’écran pour vérifier que le suivi fonctionne correctement.</p>
+        <p>Regardez différentes zones de l'écran pour vérifier que le suivi fonctionne correctement.</p>
         <p>Le point disparaîtra une fois l'expérience commencée.</p>
-        <p>Appuyez sur la touche <strong>ESPACE</strong> lorsque vous êtes prêt(e) à commencer.</p>
+        <p>Appuyez sur <strong>ESPACE</strong> lorsque vous êtes prêt(e) à commencer.</p>
       </div>
     `,
     choices: [" "],
-    on_start: () => {
-      showGazeDot = true;
-    }
+    on_start: () => { showGazeDot = true; }
   });
 
-  // ── 4. Sentence reading trials ────────────────────────────────
+  // ── 4. Sentence + catch trials ────────────────────────────────
 
-  // Fixation cross before each sentence
-  function makeSentenceTrial(sentence, index) {
-    const trialId = `${index}`;
-
+  function makeSentenceTrial(sentence, sentidx) {
     // Fixation cross
     timeline.push({
       type: jsPsychHtmlKeyboardResponse,
       stimulus: '<div style="font-size:80px;text-align:center;">+</div>',
       choices: "NO_KEYS",
       trial_duration: 1000,
-      on_start: () => sendTrigger(`fixation_onset_${trialId}`)
+      on_start: () => sendTrigger(`fixation_onset_${sentidx}`)
     });
 
-    // Sentence display — press SPACE when done reading
+    // Sentence display
     timeline.push({
       type: jsPsychHtmlKeyboardResponse,
       stimulus: `
@@ -412,55 +412,93 @@
         </div>
       `,
       choices: [" "],
-      data: { task: "reading", sentence: sentence, trial_index: index },
-      on_start: () => sendTrigger(`sentence_onset_${trialId}`),
-      on_finish: (data) => {
-        sendTrigger(`sentence_offset_${trialId}`);
-        data.rt_ms = data.rt;
-      }
+      data: { task: "reading", sentence: sentence, trial_index: sentidx },
+      on_start: () => { showGazeDot = false; sendTrigger(`sentence_onset_${sentidx}`); },
+      on_finish: (data) => { sendTrigger(`sentence_offset_${sentidx}`); data.rt_ms = data.rt; }
     });
   }
 
-  // todo: we want to add comprehension questions 
-  function makeCatchTrial(sentence, sentidx, catchidx) {
-    const question = `Avez-vous vu la phrase suivante ?<br><br><em>${sentence}</em>`;
+  function makeCatchTrial(sentence, sentidx, catchidx, was_seen) {
+    // was_seen: true if the sentence index is < current position (already shown), false = foil
     timeline.push({
       type: jsPsychHtmlButtonResponse,
       stimulus: `
-        <div class="sentence-container">
-          <div class="sentence-text">${question}</div>
+        <div class="catch-container">
+          <div class="catch-label">Vérification</div>
+          <div class="catch-question">
+            Avez-vous lu la phrase suivante ?<br><br>
+            <span class="catch-sentence">${sentence}</span>
+          </div>
         </div>
       `,
-      choices: ["Oui", "Non"],
-      data: { task: "catch", sentence: sentence, trial_index: catchidx },
+      choices: ["Oui, je l'ai lue", "Non, je ne l'ai pas lue"],
+      // button_html not needed — CSS handles styling via .jspsych-btn
+      data: {
+        task: "catch",
+        catch_sentence: sentence,
+        catch_sentence_index: sentidx,
+        catch_index: catchidx,
+        correct_answer: was_seen ? "Oui" : "Non"  // ground truth
+      },
       on_start: () => sendTrigger(`catch_onset_${catchidx}`),
       on_finish: (data) => {
         sendTrigger(`catch_offset_${catchidx}`);
-        data.response_label = data.response === 0 ? "Vrai" : "Faux";
+        data.response_label = data.response === 0 ? "Oui" : "Non";
+        // was the participant correct?
+        data.correct = data.response_label === data.correct_answer;
       }
     });
   }
 
-  // Add all sentence trials
-  // catchIdx = 0;
-  // for (let sentidx = 0; sentidx < SENTENCES.length; sentidx++) {
-  //   if (sentidx % 10 === 0) {
-  //     makeCatchTrial(SENTENCES[sentidx], sentidx, catchIdx++);
-  //   }
-  //   makeSentenceTrial(SENTENCES[sentidx], sentidx);
-  // }
+  // Build the trial sequence
+  // Catch trial logic:
+  //   - Every CATCH_EVERY_N sentences, pause and show a catch trial
+  //   - 50% chance: pick a sentence already seen (foil = false, was_seen = true)
+  //   - 50% chance: pick a sentence NOT yet seen (foil = true, was_seen = false)
+  //   - The catch trial fires AFTER the Nth sentence, so "seen" sentences are indices 0..sentidx
+
+  let catchIdx = 0;
+
+  for (let sentidx = 0; sentidx < SENTENCES.length; sentidx++) {
+    // First: add the reading trial
+    makeSentenceTrial(SENTENCES[sentidx], sentidx);
+
+    // Then: every CATCH_EVERY_N sentences, add a catch trial
+    if ((sentidx + 1) % CATCH_EVERY_N === 0) {
+      const useSeenSentence = Math.random() < 0.5;
+
+      let catchSentenceIdx;
+      if (useSeenSentence) {
+        // Pick a random sentence from those already shown (0..sentidx)
+        catchSentenceIdx = Math.floor(Math.random() * (sentidx + 1));
+      } else {
+        // Pick a random sentence NOT yet shown (sentidx+1..end)
+        const remaining = SENTENCES.length - sentidx - 1;
+        if (remaining > 0) {
+          catchSentenceIdx = sentidx + 1 + Math.floor(Math.random() * remaining);
+        } else {
+          // No unseen sentences left — fall back to a seen one
+          catchSentenceIdx = Math.floor(Math.random() * (sentidx + 1));
+        }
+      }
+
+      makeCatchTrial(SENTENCES[catchSentenceIdx], catchSentenceIdx, catchIdx++, useSeenSentence);
+    }
+  }
+
   // ── 5. End ────────────────────────────────────────────────────
 
   timeline.push({
     type: jsPsychHtmlKeyboardResponse,
     stimulus: `
       <div class="instructions">
-        <h2>L'expérience est terminée!</h2>
-        <p>Merci pour votre participation!</p>
+        <h2>L'expérience est terminée !</h2>
+        <p>Merci pour votre participation.</p>
+        <p>Appuyez sur <strong>ESPACE</strong> pour terminer.</p>
       </div>
     `,
     choices: [" "],
-    on_start: () => {
+    on_finish: () => {
       sendTrigger("experiment_end");
       showGazeDot = false;
       const dot = document.getElementById("gaze-dot");
@@ -469,7 +507,7 @@
     }
   });
 
-  // ── Run ────────────────────────────────────────────────────────
+  // ── Run ───────────────────────────────────────────────────────
   jsPsych.run(timeline);
 
   </script>
