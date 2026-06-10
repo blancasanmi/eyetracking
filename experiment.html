@@ -446,13 +446,16 @@
   seen = NA;
   for (let sentidx = 0; sentidx < SENTENCES.length; sentidx++) {
     if (sentidx % 10 === 0 && sentidx !== 0) {
-      randomidx = random(0, SENTENCES.length - 1);
+      backwards = Math.random() < 0.5 ? 1 : 0;
+      
+      randomidx = Math.floor(Math.random() * SENTENCES.length);
       makeCatchTrial(SENTENCES[randomidx], randomidx, catchIdx++);
       if (randomidx >= sentidx) {
         seen = 0; 
       }
       else {
         seen = 1;
+      }
     }
     makeSentenceTrial(SENTENCES[sentidx], sentidx);
   }
