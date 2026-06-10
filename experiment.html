@@ -420,6 +420,8 @@
 
   function makeCatchTrial(sentence, sentidx, catchidx, was_seen) {
     // was_seen: true if the sentence index is < current position (already shown), false = foil
+    const correctAnswer = was_seen ? "Oui" : "Non";  // capture this BEFORE the trial
+    
     timeline.push({
       type: jsPsychHtmlButtonResponse,
       stimulus: `
@@ -432,13 +434,13 @@
         </div>
       `,
       choices: ["Oui, je l'ai lue", "Non, je ne l'ai pas lue"],
-      // button_html not needed — CSS handles styling via .jspsych-btn
+      button_html: '<button class="jspsych-btn">%choice%</button>',
       data: {
         task: "catch",
         catch_sentence: sentence,
         catch_sentence_index: sentidx,
         catch_index: catchidx,
-        correct_answer: was_seen ? "Oui" : "Non"  // ground truth
+        correct_answer: correctAnswer
       },
       on_start: () => sendTrigger(`catch_onset_${catchidx}`),
       on_finish: (data) => {
