@@ -15,6 +15,7 @@ Usage:
 import asyncio
 import json
 import copy
+import os
 import time
 import datetime
 import websockets
@@ -30,6 +31,7 @@ GP_PORT   = 4242
 WS_HOST   = "localhost"
 WS_PORT   = 8765
 
+FOLDER = "data/"
 LOGFILE   = f"gaze_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
 
 CALIB_POINTS: list[tuple[float, float]] = [
@@ -157,7 +159,7 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
 async def handler(ws: websockets.WebSocketServerProtocol) -> None:
     print("[WS] Browser connected")
 
-    tracker = OpenGazeTracker(ip=GP_HOST, port=GP_PORT, logfile=LOGFILE)
+    tracker = OpenGazeTracker(ip=GP_HOST, port=GP_PORT, logfile=os.path.join(FOLDER, LOGFILE))
     print(f"[GP] OpenGazeTracker connected to {GP_HOST}:{GP_PORT}")
 
     stop_event = asyncio.Event()
