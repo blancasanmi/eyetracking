@@ -33,15 +33,19 @@
     max-width: 90vw;
   }
 
-  /* ── Catch trial layout ───────────────────────────────────── */
-  .jspsych-html-button-response-stimulus .sentence-container {
-    flex-direction: column;    /* stack sentence and buttons vertically */
-    gap: 40px;                 /* space between sentence and buttons */
-    height: 100vh;
+    /* Force the whole button-response trial to fit in the viewport */
+  .jspsych-html-button-response-stimulus {
+    max-height: 60vh;
+    display: flex;
+    align-items: center;
     justify-content: center;
   }
 
-  /* ── Catch trial buttons ──────────────────────────────────── */
+  /* Pull buttons up closer */
+  .jspsych-html-button-response-btngroup {
+    margin-top: 20px;  /* instead of whatever large default it has */
+  }
+  
   .jspsych-html-button-response-button button {
     font-family: 'Courier New', monospace;
     font-size: 22px;
