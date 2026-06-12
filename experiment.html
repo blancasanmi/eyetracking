@@ -12,65 +12,83 @@
   <script src="sentences.js"></script>
 
   <style>
-    /* ── Sentence display ─────────────────────────────────────── */
-    .sentence-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      width: 100vw;
-      padding: 40px;
-      box-sizing: border-box;
-    }
-    .sentence-text {
-      font-family: 'Courier New', monospace;
-      font-size: 64px;
-      line-height: 1.6;
-      letter-spacing: 4px;
-      text-align: center;
-      color: #111;
-      max-width: 90vw;
-    }
+  /* ── Sentence display ─────────────────────────────────────── */
+  .sentence-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    width: 100vw;
+    padding: 40px;
+    box-sizing: border-box;
+  }
 
-    /* ── Gaze cursor overlay ──────────────────────────────────── */
-    #gaze-dot {
-      position: fixed;
-      width: 20px;
-      height: 20px;
-      background: rgba(255, 0, 0, 0.5);
-      border-radius: 50%;
-      pointer-events: none;
-      transform: translate(-50%, -50%);
-      z-index: 99999;
-      display: none;
-    }
+  .sentence-text {
+    font-family: 'Courier New', monospace;
+    font-size: 28px;           /* reduced from 64px */
+    line-height: 1.6;
+    letter-spacing: 2px;
+    text-align: center;
+    color: #111;
+    max-width: 90vw;
+  }
 
-    /* ── Calibration targets ──────────────────────────────────── */
-    .calib-dot {
-      position: fixed;
-      width: 30px;
-      height: 30px;
-      background: red;
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 10000;
-    }
+  /* ── Catch trial layout ───────────────────────────────────── */
+  .jspsych-html-button-response-stimulus .sentence-container {
+    flex-direction: column;    /* stack sentence and buttons vertically */
+    gap: 40px;                 /* space between sentence and buttons */
+    height: 100vh;
+    justify-content: center;
+  }
 
-    .instructions {
-      font-size: 24px;
-      max-width: 800px;
-      line-height: 1.6;
-    }
+  /* ── Catch trial buttons ──────────────────────────────────── */
+  .jspsych-html-button-response-button button {
+    font-family: 'Courier New', monospace;
+    font-size: 22px;
+    padding: 20px 60px;
+    border-radius: 6px;
+    margin: 0 15px;
+    cursor: pointer;
+  }
 
-    /* ── Consent form ─────────────────────────────────────────── */
-    #container-consent {
-      padding: 40px;
-      max-width: 900px;
-      margin: auto;
-      overflow-y: auto;
-      max-height: 100vh;
-    }
-  </style>
+  /* ── Gaze cursor overlay ──────────────────────────────────── */
+  #gaze-dot {
+    position: fixed;
+    width: 20px;
+    height: 20px;
+    background: rgba(255, 0, 0, 0.5);
+    border-radius: 50%;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    z-index: 99999;
+    display: none;
+  }
+
+  .calib-dot {
+    position: fixed;
+    width: 30px;
+    height: 30px;
+    background: red;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10000;
+  }
+
+  .instructions {
+    font-size: 24px;
+    max-width: 800px;
+    line-height: 1.6;
+  }
+
+  /* ── Consent form ─────────────────────────────────────────── */
+  #container-consent {
+    padding: 40px;
+    max-width: 900px;
+    margin: auto;
+    overflow-y: auto;
+    max-height: 100vh;
+  }
+</style>
 </head>
 <body>
   <div id="gaze-dot"></div>
