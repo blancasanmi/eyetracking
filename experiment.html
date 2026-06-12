@@ -443,16 +443,17 @@
 
   // todo: make sure this works well 
   catchIdx = 0;
-  seen = NA;
+  seen = NaN;
   for (let sentidx = 0; sentidx < SENTENCES.length; sentidx++) {
     if (sentidx % 10 === 0 && sentidx !== 0) {
-      randomidx = random(0, SENTENCES.length - 1);
+      randomidx = Math.floor(Math.random() * SENTENCES.length);
       makeCatchTrial(SENTENCES[randomidx], randomidx, catchIdx++);
       if (randomidx >= sentidx) {
         seen = 0; 
       }
       else {
         seen = 1;
+      }
     }
     makeSentenceTrial(SENTENCES[sentidx], sentidx);
   }
