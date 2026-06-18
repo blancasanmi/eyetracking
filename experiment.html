@@ -442,41 +442,37 @@
 
   // ── 4. Sentence reading trials ────────────────────────────────
 
-  // Fixation cross before each sentence
-  function makeSentenceTrial(sentence, index) {
+  function makeSentenceTrials(sentence, index) {
     const trialId = `${index}`;
-
-    // Fixation cross
-    timeline.push({
-      type: jsPsychHtmlKeyboardResponse,
-      stimulus: '<div style="font-size:80px;text-align:center;">+</div>',
-      choices: "NO_KEYS",
-      trial_duration: 1000,
-      on_start: () => sendTrigger(`fixation_onset_${trialId}`)
-    });
-
-    // Sentence display — press SPACE when done reading
-    timeline.push({
-      type: jsPsychHtmlKeyboardResponse,
-      stimulus: `
-        <div class="sentence-container">
-          <div class="sentence-text">${sentence}</div>
-        </div>
-      `,
-      choices: [" "],
-      data: { task: "reading", sentence: sentence, trial_index: index },
-      on_start: () => sendTrigger(`sentence_onset_${trialId}`),
-      on_finish: (data) => {
-        sendTrigger(`sentence_offset_${trialId}`);
-        data.rt_ms = data.rt;
+    return [
+      {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: '<div style="font-size:80px;text-align:center;">+</div>',
+        choices: "NO_KEYS",
+        trial_duration: 1000,
+        on_start: () => sendTrigger(`fixation_onset_${trialId}`)
+      },
+      {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `
+          <div class="sentence-container">
+            <div class="sentence-text">${sentence}</div>
+          </div>
+        `,
+        choices: [" "],
+        data: { task: "reading", sentence: sentence, trial_index: index },
+        on_start: () => sendTrigger(`sentence_onset_${trialId}`),
+        on_finish: (data) => {
+          sendTrigger(`sentence_offset_${trialId}`);
+          data.rt_ms = data.rt;
+        }
       }
-    });
+    ];
   }
 
-  // todo: we want to add catch trials 
-  function makeCatchTrial(sentence, sentidx, catchidx, type) {
+  function makeCatchTrialNode(sentence, sentidx, catchidx, type) {
     const question = `Avez-vous vu la phrase suivante ?<br><br><em>${sentence}</em>`;
-    timeline.push({
+    return {
       type: jsPsychHtmlButtonResponse,
       stimulus: `
         <div class="sentence-container">
@@ -492,25 +488,26 @@
         data.correct_response = type === "seen" ? "Oui" : "Non";
         data.correct = data.response === (type === "seen" ? 0 : 1);
       }
-    });
+    };
   }
 
-  // ── 5. Build sentence/catch trials then run ───────────────────
+  // ── 5. Build sentence/catch trials and inject into running timeline ──
 
-  // Called from the waiting CallFunction trial above
   timeline.push({
     type: jsPsychCallFunction,
     func: function() {
+      const subTimeline = [];
       let catchIdx = 0;
+
       for (let sentidx = 0; sentidx < SENTENCES.length; sentidx++) {
         if (catchTrials[String(sentidx)]) {
           const ct = catchTrials[String(sentidx)];
-          makeCatchTrial(ct.sentence, sentidx, catchIdx++, ct.type);
+          subTimeline.push(makeCatchTrialNode(ct.sentence, sentidx, catchIdx++, ct.type));
         }
-        makeSentenceTrial(SENTENCES[sentidx], sentidx);
+        subTimeline.push(...makeSentenceTrials(SENTENCES[sentidx], sentidx));
       }
 
-      timeline.push({
+      subTimeline.push({
         type: jsPsychHtmlKeyboardResponse,
         stimulus: `
           <div class="instructions">
@@ -527,6 +524,8 @@
           stopExperiment();
         }
       });
+
+      jsPsych.addNodeToEndOfTimeline({ timeline: subTimeline });
     }
   });
 
