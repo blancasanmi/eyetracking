@@ -152,6 +152,7 @@
         if (msg.type === "catch_trials") {
         catchTrials = msg.data;
         console.log("Catch trials received:", catchTrials);
+        startExperiment();
         } 
         if (msg.type === "gaze" && msg.data) {
           const d = msg.data;
@@ -468,20 +469,19 @@
     });
   }
 
+  // ── 5. End ────────────────────────────────────────────────────
+
+  function startExperiment() {
   let catchIdx = 0;
   for (let sentidx = 0; sentidx < sentences.length; sentidx++) {
-
-    // Check if this position has a catch trial (from Python)
     if (catchTrials[String(sentidx)]) {
       const ct = catchTrials[String(sentidx)];
       makeCatchTrial(ct.sentence, sentidx, catchIdx++, ct.type);
     }
-
     makeSentenceTrial(sentences[sentidx], sentidx);
   }
 
-  // ── 5. End ────────────────────────────────────────────────────
-
+  // End trial
   timeline.push({
     type: jsPsychHtmlKeyboardResponse,
     stimulus: `
@@ -500,8 +500,8 @@
     }
   });
 
-  // ── Run ────────────────────────────────────────────────────────
   jsPsych.run(timeline);
+  }
 
   </script>
 </body>
