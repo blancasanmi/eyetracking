@@ -73,8 +73,8 @@ def load_sentences_from_js(filepath: str) -> list[str]:
 
     array_content = match.group(1)
 
-    # Extract all quoted strings (single or double quotes)
-    sentences = re.findall(r'["\'](.+?)["\']', array_content, re.DOTALL)
+    # Extract double-quoted strings only — avoids splitting on French apostrophes
+    sentences = re.findall(r'"([^"]+)"', array_content)
 
     if not sentences:
         raise ValueError("No sentences found inside the array.")

@@ -484,11 +484,13 @@
         </div>
       `,
       choices: ["Oui", "Non"],
-      data: { task: "catch", sentence: sentence, trial_index: catchidx, catch_type: type },
+      data: { task: "catch", sentence: sentence, catch_index: catchidx, sentence_position: sentidx, catch_type: type },
       on_start: () => sendTrigger(`catch_onset_${catchidx}`),
       on_finish: (data) => {
         sendTrigger(`catch_offset_${catchidx}`);
         data.response_label = data.response === 0 ? "Oui" : "Non";
+        data.correct_response = type === "seen" ? "Oui" : "Non";
+        data.correct = data.response === (type === "seen" ? 0 : 1);
       }
     });
   }
