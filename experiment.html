@@ -114,6 +114,7 @@
   let gazeLog = [];
   let connected = false;
   let showGazeDot = true;
+  let catchTrials = {}
 
   function ensureGazeDot() {
     let dot = document.getElementById("gaze-dot");
@@ -448,7 +449,7 @@
   }
 
   // todo: we want to add catch trials 
-  function makeCatchTrial(sentence, sentidx, catchidx) {
+  function makeCatchTrial(sentence, sentidx, catchidx, type) {
     const question = `Avez-vous vu la phrase suivante ?<br><br><em>${sentence}</em>`;
     timeline.push({
       type: jsPsychHtmlButtonResponse,
@@ -458,31 +459,27 @@
         </div>
       `,
       choices: ["Oui", "Non"],
-      data: { task: "catch", sentence: sentence, trial_index: catchidx },
+      data: { task: "catch", sentence: sentence, trial_index: catchidx, catch_type: type },
       on_start: () => sendTrigger(`catch_onset_${catchidx}`),
       on_finish: (data) => {
         sendTrigger(`catch_offset_${catchidx}`);
-        data.response_label = data.response === 0 ? "Vrai" : "Faux";
+        data.response_label = data.response === 0 ? "Oui" : "Non";
       }
     });
   }
 
-  // todo: make sure this works well 
-  catchIdx = 0;
-  seen = NaN;
-  for (let sentidx = 0; sentidx < SENTENCES.length; sentidx++) {
-    if (sentidx % 10 === 0 && sentidx !== 0) {
-      randomidx = Math.floor(Math.random() * SENTENCES.length);
-      makeCatchTrial(SENTENCES[randomidx], randomidx, catchIdx++);
-      if (randomidx >= sentidx) {
-        seen = 0; 
-      }
-      else {
-        seen = 1;
-      }
+  let catchIdx = 0;
+  for (let sentidx = 0; sentidx < sentences.length; sentidx++) {
+
+    // Check if this position has a catch trial (from Python)
+    if (catchTrials[String(sentidx)]) {
+      const ct = catchTrials[String(sentidx)];
+      makeCatchTrial(ct.sentence, sentidx, catchIdx++, ct.type);
     }
-    makeSentenceTrial(SENTENCES[sentidx], sentidx);
+
+    makeSentenceTrial(sentences[sentidx], sentidx);
   }
+
   // ── 5. End ────────────────────────────────────────────────────
 
   timeline.push({
