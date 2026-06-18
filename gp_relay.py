@@ -16,7 +16,7 @@ import asyncio
 import json
 import copy
 import os
-from random import random
+import random
 import time
 import datetime
 import websockets
@@ -67,7 +67,7 @@ def load_sentences_from_js(filepath: str) -> list[str]:
         content = f.read()
 
     # Extract the array content between [ and ]
-    match = re.search(r'const\s+sentences\s*=\s*\[(.+?)\]', content, re.DOTALL)
+    match = re.search(r'const\s+SENTENCES\s*=\s*\[(.+?)\]', content, re.DOTALL)
     if not match:
         raise ValueError("Could not find a 'const sentences = [...]' array in the file.")
 
@@ -120,7 +120,7 @@ def catch_trial_sentences() -> dict[int, dict]:
                 "sentence": catch_sentence,
                 "type": catch_type,
             }
-
+    print(catch_trials)
     return catch_trials
 
 async def _wait_for_calibration_result(
