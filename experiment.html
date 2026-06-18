@@ -114,7 +114,9 @@
   let gazeLog = [];
   let connected = false;
   let showGazeDot = true;
-  let catchTrials = {}
+  let catchTrials = {};
+  let catchTrialsReceived = false;
+  let onCatchTrialsReceived = null;
 
   function ensureGazeDot() {
     let dot = document.getElementById("gaze-dot");
@@ -150,10 +152,11 @@
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if (msg.type === "catch_trials") {
-        catchTrials = msg.data;
-        console.log("Catch trials received:", catchTrials);
-        startExperiment();
-        } 
+          catchTrials = msg.data;
+          catchTrialsReceived = true;
+          console.log("Catch trials received:", catchTrials);
+          if (onCatchTrialsReceived) onCatchTrialsReceived();
+        }
         if (msg.type === "gaze" && msg.data) {
           const d = msg.data;
           const sample = {
@@ -416,6 +419,27 @@
     }
   });
 
+  // Wait for catch_trials from server (5 s timeout → start without them)
+  timeline.push({
+    type: jsPsychCallFunction,
+    async: true,
+    func: function(done) {
+      showGazeDot = false;
+      if (catchTrialsReceived) {
+        done();
+      } else {
+        const timeout = setTimeout(() => {
+          onCatchTrialsReceived = null;
+          done();
+        }, 5000);
+        onCatchTrialsReceived = () => {
+          clearTimeout(timeout);
+          done();
+        };
+      }
+    }
+  });
+
   // ── 4. Sentence reading trials ────────────────────────────────
 
   // Fixation cross before each sentence
@@ -469,39 +493,43 @@
     });
   }
 
-  // ── 5. End ────────────────────────────────────────────────────
+  // ── 5. Build sentence/catch trials then run ───────────────────
 
-  function startExperiment() {
-  let catchIdx = 0;
-  for (let sentidx = 0; sentidx < sentences.length; sentidx++) {
-    if (catchTrials[String(sentidx)]) {
-      const ct = catchTrials[String(sentidx)];
-      makeCatchTrial(ct.sentence, sentidx, catchIdx++, ct.type);
-    }
-    makeSentenceTrial(sentences[sentidx], sentidx);
-  }
-
-  // End trial
+  // Called from the waiting CallFunction trial above
   timeline.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: `
-      <div class="instructions">
-        <h2>L'expérience est terminée!</h2>
-        <p>Merci pour votre participation!</p>
-      </div>
-    `,
-    choices: [" "],
-    on_start: () => {
-      sendTrigger("experiment_end");
-      showGazeDot = false;
-      const dot = document.getElementById("gaze-dot");
-      if (dot) dot.style.display = "none";
-      stopExperiment();
+    type: jsPsychCallFunction,
+    func: function() {
+      let catchIdx = 0;
+      for (let sentidx = 0; sentidx < SENTENCES.length; sentidx++) {
+        if (catchTrials[String(sentidx)]) {
+          const ct = catchTrials[String(sentidx)];
+          makeCatchTrial(ct.sentence, sentidx, catchIdx++, ct.type);
+        }
+        makeSentenceTrial(SENTENCES[sentidx], sentidx);
+      }
+
+      timeline.push({
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `
+          <div class="instructions">
+            <h2>L'expérience est terminée!</h2>
+            <p>Merci pour votre participation!</p>
+          </div>
+        `,
+        choices: [" "],
+        on_start: () => {
+          sendTrigger("experiment_end");
+          showGazeDot = false;
+          const dot = document.getElementById("gaze-dot");
+          if (dot) dot.style.display = "none";
+          stopExperiment();
+        }
+      });
     }
   });
 
+  // ── Run ────────────────────────────────────────────────────────
   jsPsych.run(timeline);
-  }
 
   </script>
 </body>
