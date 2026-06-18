@@ -77,7 +77,6 @@ async def _wait_for_calibration_result(
         await asyncio.sleep(0.1)
     return None
 
-
 async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
     t0 = time.monotonic()
     

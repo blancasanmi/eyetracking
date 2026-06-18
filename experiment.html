@@ -148,6 +148,10 @@
 
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
+        if (msg.type === "catch_trials") {
+        catchTrials = msg.data;
+        console.log("Catch trials received:", catchTrials);
+        } 
         if (msg.type === "gaze" && msg.data) {
           const d = msg.data;
           const sample = {

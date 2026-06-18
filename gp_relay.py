@@ -16,9 +16,12 @@ import asyncio
 import json
 import copy
 import os
+from random import random
 import time
 import datetime
 import websockets
+import re
+
 
 from opengaze import OpenGazeTracker
 
@@ -58,7 +61,67 @@ def _build_rec_dict(tracker: OpenGazeTracker) -> dict | None:
         if rec is None:
             return None
         return copy.deepcopy(rec)
+    
+def load_sentences_from_js(filepath: str) -> list[str]:
+    with open(filepath, "r", encoding="utf-8") as f:
+        content = f.read()
 
+    # Extract the array content between [ and ]
+    match = re.search(r'const\s+sentences\s*=\s*\[(.+?)\]', content, re.DOTALL)
+    if not match:
+        raise ValueError("Could not find a 'const sentences = [...]' array in the file.")
+
+    array_content = match.group(1)
+
+    # Extract all quoted strings (single or double quotes)
+    sentences = re.findall(r'["\'](.+?)["\']', array_content, re.DOTALL)
+
+    if not sentences:
+        raise ValueError("No sentences found inside the array.")
+
+    return sentences
+
+
+def catch_trial_sentences() -> dict[int, dict]:
+    sentences = load_sentences_from_js("sentences.js")
+    catch_trials = {}
+
+    seen = []
+    unseen_pool = sentences.copy()
+
+    i = 0
+    while i < len(sentences):
+        interval = random.randint(7, 13)
+        catch_position = i + interval
+
+        while i < catch_position and i < len(sentences):
+            sentence = sentences[i]
+            seen.append(sentence)
+            if sentence in unseen_pool:
+                unseen_pool.remove(sentence)
+            i += 1
+
+        if i >= catch_position:
+            use_seen = random.random() < 0.5 and len(seen) >= 1
+
+            if use_seen:
+                recent = seen[-5:]
+                catch_sentence = random.choice(recent)
+                catch_type = "seen"
+            else:
+                if unseen_pool:
+                    catch_sentence = random.choice(unseen_pool)
+                    catch_type = "unseen"
+                else:
+                    catch_sentence = random.choice(seen)
+                    catch_type = "seen"  # fallback, honestly seen at this point
+
+            catch_trials[catch_position] = {
+                "sentence": catch_sentence,
+                "type": catch_type,
+            }
+
+    return catch_trials
 
 async def _wait_for_calibration_result(
     tracker: OpenGazeTracker,
@@ -162,6 +225,15 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
     tracker = OpenGazeTracker(ip=GP_HOST, port=GP_PORT, logfile=os.path.join(FOLDER, LOGFILE))
     print(f"[GP] OpenGazeTracker connected to {GP_HOST}:{GP_PORT}")
 
+    # Generate and send catch trials immediately on connection
+    catch_trials = catch_trial_sentences()
+    # Convert int keys to strings for JSON serialization
+    await ws.send(json.dumps({
+        "type": "catch_trials",
+        "data": {str(k): v for k, v in catch_trials.items()}
+    }))
+    print(f"[WS] Sent {len(catch_trials)} catch trials to browser")
+
     stop_event = asyncio.Event()
     sample_count = 0
 
@@ -261,6 +333,7 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
 async def main() -> None:
     print(f"[WS] Relay listening on ws://{WS_HOST}:{WS_PORT}")
     print("     Waiting for browser to connect...")
+
     async with websockets.serve(handler, WS_HOST, WS_PORT):
         await asyncio.Future()
 
