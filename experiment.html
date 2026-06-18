@@ -214,20 +214,34 @@
   // ═══════════════════════════════════════════════════════════════
 
   const jsPsych = initJsPsych({
-    on_finish: function () {
-      const results = {
-        jspsych: jsPsych.data.get().json(),
-        gaze: gazeLog
-      };
+  on_finish: function () {
+    // ── Save jsPsych data as CSV ──
+    const allData = jsPsych.data.get();
+    
+    // Filter just catch trials for a clean catch trial CSV
+    const catchData = allData.filter({ task: "catch" });
+    
+    // Download full data
+    allData.localSave("csv", "experiment_data.csv");
+    
+    // Download catch trials only
+    catchData.localSave("csv", "catch_trials_data.csv");
 
-      if (typeof jatos !== "undefined") {
-        jatos.submitResultData(JSON.stringify(results), jatos.startNextComponent);
-      } else {
-        console.log("Results:", results);
-        document.body.innerHTML = "<pre style='padding:20px;font-size:14px;'>" +
-          JSON.stringify(results, null, 2).slice(0, 5000) + "\n...</pre>";
-      }
+    // Also save gaze log as JSON
+    const gazeBlob = new Blob([JSON.stringify(gazeLog, null, 2)], { type: "application/json" });
+    const gazeUrl = URL.createObjectURL(gazeBlob);
+    const a = document.createElement("a");
+    a.href = gazeUrl;
+    a.download = "gaze_log.json";
+    a.click();
+
+    if (typeof jatos !== "undefined") {
+      jatos.submitResultData(JSON.stringify({
+        jspsych: allData.json(),
+        gaze: gazeLog
+      }), jatos.startNextComponent);
     }
+  }
   });
 
   const timeline = [];
