@@ -290,7 +290,7 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                                 "reason":   "max_attempts",
                                 "attempts": attempts,
                             }))
-                            break
+                            # break
 
                         try:
                             avg_error, valid_points = await _run_calibration(tracker)
