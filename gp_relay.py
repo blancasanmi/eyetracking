@@ -268,7 +268,13 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                     value = str(msg.get("value", "")).replace('"', "'")
                     tracker.user_data(value)
                     print(f"  [TRIGGER] {value}")
-
+                elif cmd == "save_data":
+                    data_type = msg.get("data_type", "unknown")
+                    content = msg.get("content", "")
+                    filename = os.path.join(FOLDER, f"{data_type}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.{'csv' if 'csv' in data_type else 'json'}")
+                    with open(filename, "w", encoding="utf-8") as f:
+                        f.write(content)
+                    print(f"[DATA] Saved {data_type} to {filename}")
                 elif cmd == "calibrate":
                     avg_error = float("inf")
                     attempts  = 0
