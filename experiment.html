@@ -211,6 +211,13 @@
     }
   }
 
+  function sendParticipantID(id) {
+    if (ws && connected) {
+      ws.send(JSON.stringify({ cmd: "participant_id", value: id }));
+      console.log("[PARTICIPANT ID]", id);
+    }
+  }
+
   function startCalibration() {
     if (ws && connected) {
       ws.send(JSON.stringify({ cmd: "calibrate" }));
@@ -328,6 +335,7 @@
         participantId = value;
         jsPsych.data.addProperties({ participant_id: participantId });
         sendTrigger(`participant_id_${participantId}`);
+        sendParticipantID(`id_${participantId}`)
 
         display.innerHTML = '';
         done();
