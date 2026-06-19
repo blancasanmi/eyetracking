@@ -38,9 +38,9 @@ FOLDER = "data/"
 LOGFILE   = f"gaze_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
 
 CALIB_POINTS: list[tuple[float, float]] = [
-    (0.5,  0.1),
-    (0.05, 0.5), (0.5, 0.5), (0.95, 0.5),
-    (0.5,  0.9),
+    (0.1,  0.1), (0.5,  0.1), (0.9,  0.1),
+    (0.1,  0.5), (0.5,  0.5), (0.9,  0.5),
+    (0.1,  0.9), (0.5,  0.9), (0.9,  0.9),
 ]
 
 MAX_CALIB_ATTEMPTS   = 2
@@ -290,7 +290,7 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                                 "reason":   "max_attempts",
                                 "attempts": attempts,
                             }))
-                            # break
+                            break
 
                         try:
                             avg_error, valid_points = await _run_calibration(tracker)
