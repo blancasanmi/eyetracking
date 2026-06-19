@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html>
 <head>
   <title>Eye-Tracking Reading Experiment</title>
@@ -84,27 +83,13 @@
     line-height: 1.6;
   }
 
-  /* ── Participant ID entry ───────────────────────────────────── */
-  #container-pid {
+  /* ── Consent form ─────────────────────────────────────────── */
+  #container-consent {
     padding: 40px;
-    max-width: 500px;
+    max-width: 900px;
     margin: auto;
-    text-align: center;
-  }
-
-  #pid-input {
-    font-family: 'Courier New', monospace;
-    font-size: 24px;
-    padding: 10px 16px;
-    width: 200px;
-    text-align: center;
-    margin: 20px 0;
-  }
-
-  #pid-error {
-    color: #b00020;
-    font-size: 16px;
-    min-height: 24px;
+    overflow-y: auto;
+    max-height: 100vh;
   }
 </style>
 </head>
@@ -131,7 +116,6 @@
   let catchTrials = {};
   let catchTrialsReceived = false;
   let onCatchTrialsReceived = null;
-  let participantId = null;
 
   function ensureGazeDot() {
     let dot = document.getElementById("gaze-dot");
@@ -208,13 +192,6 @@
     if (ws && connected) {
       ws.send(JSON.stringify({ cmd: "trigger", value: label }));
       console.log("[TRIGGER]", label);
-    }
-  }
-
-  function sendParticipantID(id) {
-    if (ws && connected) {
-      ws.send(JSON.stringify({ cmd: "participant_id", value: id }));
-      console.log("[PARTICIPANT ID]", id);
     }
   }
 
@@ -298,7 +275,95 @@
 
   const timeline = [];
 
-  // ── 0. Instructions ─────────────────────────────────────────────
+  // ── 0. Consent Form ───────────────────────────────────────────
+
+  timeline.push({
+    type: jsPsychCallFunction,
+    async: true,
+    func: function(done) {
+      const display = jsPsych.getDisplayElement();
+      display.innerHTML = `
+        <div id="container-consent">
+          <div id="consent">
+            <h1>Nous avons besoin de votre consentement pour procéder</h1>
+            <hr>
+            <div align="left" class="legal well">
+              <p align="center"><strong>Feuille d'information pour les participants</strong></p>
+              <p>Titre de l'étude : <strong>Suspense: Analyse à l'eye-tracker</strong></p>
+
+              <p>
+                Nous souhaitons vous inviter à participer à ce projet de recherche qui porte sur l'évaluation de suspense dans la lecture.<br>
+                L'expérience va durer environ 1 heure. Nous vous demanderons de faire certaines ou toutes les choses suivantes lors de l'expérience :<br>
+                1) Lire des séquences de phrases<br>
+                2) Répondre à des questionnaires<br>
+              </p>
+
+              <p><strong>Chercheurs</strong></p>
+              <p>Blanca San Millan Peralta, étudiante en Master Intelligence Artificielle et Société à Université PSL, Université Panthéon-Sorbonne, uncertaintysuspense@gmail.com<br>
+                Dr. Bastien Blain, Centre d'économie de la Sorbonne, Université Panthéon-Sorbonne, uncertaintysuspense@gmail.com
+              </p>
+
+              <p><strong>Rémunération du participant / Paiement du sujet</strong></p>
+              <p>La participation à ce projet de recherche est volontaire.</p>
+
+              <p><strong>Droits du sujet et retrait de l'étude</strong></p>
+              <p>Vous devez participer à cette étude uniquement si vous le souhaitez ; choisir de ne pas participer ne vous désavantagera en aucune façon et vous ne subirez aucune pénalité. Avant de décider si vous souhaitez participer, veuillez lire attentivement cette feuille d'information. N'hésitez pas à en discuter avec d'autres personnes si vous le souhaitez. Demandez-nous s'il y a quelque chose qui n'est pas clair ou si vous souhaitez obtenir plus d'informations. Si vous acceptez de participer, veuillez remplir le formulaire de consentement ci-dessous. Après avoir signé ce formulaire de consentement et accepté de participer, vous pouvez encore vous retirer à tout moment sans donner de raisons.</p>
+
+              <p><strong>Avis de protection des données et de la confidentialité</strong></p>
+              <p>Vos données sont anonymes et stockées en toute sécurité sur un serveur du CNRS. Si nous sommes en mesure d'anonymiser ou de pseudonymiser vos données personnelles, nous le ferons et nous nous efforcerons de minimiser le traitement de vos données personnelles chaque fois que cela est possible.</p>
+
+              <p><strong>Confidentialité</strong></p>
+              <p>Il est prévu que la recherche proposée ne génère pas de résultats exploitables commercialement. Les informations suivantes pourraient également être obtenues : le genre, la date de naissance, le niveau d'éducation. Afin que vos données restent anonymes, un code y sera attaché. Ainsi, vous ne serez pas identifiable dans la rédaction ou toute autre publication/présentation qui pourrait résulter de cette étude.</p>
+
+              <p align="center"><strong>FORMULAIRE DE CONSENTEMENT</strong></p>
+              <p><strong>Titre de l'étude</strong>: Suspense: Analyse à l'eye-tracker</p>
+              <p><strong>Department</strong>: Sorbonne Economic Center, Pantheon-Sorbonne University, Paris</p>
+              <p><strong>Nom et Contact du Chercheur</strong>: Blanca San Millan Peralta, Master Intelligence Artificielle et Société, Université PSL and Pantheon-Sorbonne University, blanca.sanmillanperalta@psl.eu</p>
+              <p><strong>Nom et Contact du Superviseur</strong>: Dr. Bastien Blain, Sorbonne Economic Center, Pantheon-Sorbonne University, uncertaintysuspense@gmail.com</p>
+
+              <p>Nous vous remercions de considérer une potentielle participation à cette recherche. La personne organisant l'étude doit vous expliquer le projet avant que vous acceptiez de participer. Si vous avez des questions découlant de la fiche d'information ou de l'explication qui vous a déjà été donnée, veuillez les poser au chercheur avant de décider si vous souhaitez participer. Une copie de ce formulaire de consentement vous sera remise pour que vous puissiez la conserver et vous y référer à tout moment.</p>
+
+              <ol>
+                <li>Je confirme avoir lu et compris la fiche d'information pour l'étude. J'ai eu l'occasion de considérer les informations et ce qui est attendu de moi. J'ai également eu la possibilité de poser des questions auxquelles j'ai reçu des réponses claires.</li>
+                <br><li>Je consens à participer à l'étude. Je comprends que mes informations personnelles seront utilisées aux fins qui m'ont été expliquées.</li>
+                <br><li>Je comprends que toutes les informations personnelles resteront confidentielles et que tous les efforts seront déployés pour que je ne sois pas identifiable.</li>
+                <br><li>Je comprends que mes données recueillies dans cette étude seront stockées de manière anonyme et sécurisée. Il ne sera pas possible de m'identifier dans les publications.</li>
+                <br><li>Je comprends les risques potentiels de ma participation et je suis conscient du soutien qui me sera offert si je suis en détresse pendant le cours de la recherche.</li>
+                <br><li>Aucune promesse ou garantie de bénéfices ne m'a été faite pour m'encourager à participer.</li>
+                <br><li>Je comprends que les données ne seront pas mises à la disposition d'organisations commerciales mais sont exclusivement la responsabilité du ou des chercheurs qui entreprennent cette étude.</li>
+                <br><li>Je comprends que je ne bénéficierai pas financièrement de cette étude ou de tout résultat possible qui en découlerait à l'avenir.</li>
+                <br><li>Je comprends que je serai indemnisé pour la partie du temps consacrée à l'étude (si applicable).</li>
+                <br><li>J'accepte que mes données anonymisées puissent être utilisées par d'autres pour des recherches futures (personne ne pourra vous identifier lorsque ces données seront partagées).</li>
+                <br><li>Je comprends que les informations que j'ai fournies pourront être publiées dans un rapport.</li>
+                <br><li>Je confirme que je comprends les critères d'inclusion tels que détaillés dans la fiche d'information.</li>
+                <br><li>Je sais qui je dois contacter si je souhaite déposer une plainte.</li>
+                <br><li>Je suis d'accord que mes données soient archivées. Je comprends que d'autres chercheurs authentifiés de l'Université Panthéon-Sorbonne auront accès à mes données anonymisées.</li>
+              </ol>
+
+              <button type="button" class="btn btn-default btn-sm" onClick="window.print();">
+                Imprimer une copie
+              </button>
+            </div>
+
+            <br>
+            <center>
+              <button type="button" class="btn btn-primary btn-lg" id="continue_btn">Je consens</button>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              <button type="button" class="btn btn-danger btn-lg" onclick="window.location='http://www.prolific.ac'">Non merci, je ne souhaite pas participer</button>
+            </center>
+            <br>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('continue_btn').addEventListener('click', () => {
+        display.innerHTML = '';
+        done();
+      });
+    }
+  });
+  
+  // ── 1. Connect to relay ────────────────────────────────────────
 
   timeline.push({
     type: jsPsychHtmlKeyboardResponse,
@@ -314,8 +379,6 @@
     on_finish: () => {} // la connexion s'effectue lors de l'essai suivant
   });
 
-  // ── 1. Connect to relay ────────────────────────────────────────
-
   timeline.push({
     type: jsPsychCallFunction,
     async: true,
@@ -329,58 +392,7 @@
     }
   });
 
-  // ── 2. Participant ID entry (ws is connected by this point) ────
-
-  timeline.push({
-    type: jsPsychCallFunction,
-    async: true,
-    func: function(done) {
-      const display = jsPsych.getDisplayElement();
-      display.innerHTML = `
-        <div id="container-pid">
-          <h2>Bienvenue</h2>
-          <p>Veuillez entrer votre numéro de participant pour commencer l'expérience.</p>
-          <p><strong>Participant ID :</strong></p>
-          <input type="text" id="pid-input" inputmode="numeric" autocomplete="off" placeholder="Ex: 12">
-          <div id="pid-error"></div>
-          <br>
-          <button type="button" class="btn btn-primary btn-lg" id="pid_continue_btn">Continuer</button>
-        </div>
-      `;
-
-      const input = document.getElementById('pid-input');
-      const errorBox = document.getElementById('pid-error');
-
-      function validateAndContinue() {
-        const value = input.value.trim();
-
-        if (value === "") {
-          errorBox.textContent = "Veuillez entrer un numéro de participant.";
-          return;
-        }
-        if (!/^\d+$/.test(value)) {
-          errorBox.textContent = "Le numéro de participant doit contenir uniquement des chiffres.";
-          return;
-        }
-
-        participantId = value;
-        jsPsych.data.addProperties({ participant_id: participantId });
-        sendTrigger(`participant_id_${participantId}`);
-        sendParticipantID(participantId);
-
-        display.innerHTML = '';
-        done();
-      }
-
-      document.getElementById('pid_continue_btn').addEventListener('click', validateAndContinue);
-      input.addEventListener('keydown', (e) => {
-        if (e.key === "Enter") validateAndContinue();
-      });
-      input.focus();
-    }
-  });
-
-// ── 3. Calibration ────────────────────────────────────────────
+// ── 2. Calibration ────────────────────────────────────────────
 
     timeline.push({
     type: jsPsychHtmlKeyboardResponse,
@@ -431,7 +443,7 @@
     }
   });
 
-  // ── 4. Gaze check (show dot so participant can verify) ────────
+  // ── 3. Gaze check (show dot so participant can verify) ────────
 
   timeline.push({
     type: jsPsychHtmlKeyboardResponse,
@@ -470,7 +482,7 @@
     }
   });
 
-  // ── 5. Sentence reading trials ────────────────────────────────
+  // ── 4. Sentence reading trials ────────────────────────────────
 
   function makeSentenceTrials(sentence, index) {
     const trialId = `${index}`;
@@ -521,7 +533,7 @@
     };
   }
 
-  // ── 6. Build sentence/catch trials and inject into running timeline ──
+  // ── 5. Build sentence/catch trials and inject into running timeline ──
 
   timeline.push({
     type: jsPsychCallFunction,

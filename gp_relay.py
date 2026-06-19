@@ -222,7 +222,18 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
 async def handler(ws: websockets.WebSocketServerProtocol) -> None:
     print("[WS] Browser connected")
 
-    tracker = None  # created once we know the participant ID
+    tracker = OpenGazeTracker(ip=GP_HOST, port=GP_PORT, logfile=os.path.join(FOLDER, LOGFILE))
+    print(f"[GP] OpenGazeTracker connected to {GP_HOST}:{GP_PORT}")
+
+    # Generate and send catch trials immediately on connection
+    catch_trials = catch_trial_sentences()
+    # Convert int keys to strings for JSON serialization
+    await ws.send(json.dumps({
+        "type": "catch_trials",
+        "data": {str(k): v for k, v in catch_trials.items()}
+    }))
+    print(f"[WS] Sent {len(catch_trials)} catch trials to browser")
+
     stop_event = asyncio.Event()
     sample_count = 0
 
@@ -232,51 +243,31 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
     async def forward_gaze() -> None:
         nonlocal sample_count
         while not stop_event.is_set():
-            if tracker is not None:
-                rec = _build_rec_dict(tracker)
-                if rec is not None:
-                    try:
-                        await ws.send(json.dumps({"type": "gaze", "data": rec}))
-                        sample_count += 1
-                        if sample_count % 5000 == 0:
-                            print(f"  [GP] {sample_count} gaze samples forwarded")
-                    except websockets.ConnectionClosed:
-                        stop_event.set()
-                        return
+            rec = _build_rec_dict(tracker)
+            if rec is not None:
+                try:
+                    await ws.send(json.dumps({"type": "gaze", "data": rec}))
+                    sample_count += 1
+                    if sample_count % 5000 == 0:
+                        print(f"  [GP] {sample_count} gaze samples forwarded")
+                except websockets.ConnectionClosed:
+                    stop_event.set()
+                    return
             await asyncio.sleep(0.005)   # ~200 Hz ceiling
 
     # ------------------------------------------------------------------
     # Task: receive commands from the browser
     # ------------------------------------------------------------------
     async def receive_commands() -> None:
-        nonlocal tracker
         try:
             async for raw in ws:
                 msg = json.loads(raw)
                 cmd = msg.get("cmd")
 
-                if cmd == "participant_id":
-                    pid = str(msg.get("value", "")).replace('"', "'")
-                    logfile = f"gaze_{pid}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
-                    tracker = OpenGazeTracker(ip=GP_HOST, port=GP_PORT, logfile=os.path.join(FOLDER, logfile))
-                    print(f"[ID] Participant {pid} — logging to {logfile}")
-
-                    # Generate and send catch trials now that the tracker exists
-                    catch_trials = catch_trial_sentences()
-                    await ws.send(json.dumps({
-                        "type": "catch_trials",
-                        "data": {str(k): v for k, v in catch_trials.items()}
-                    }))
-                    print(f"[WS] Sent {len(catch_trials)} catch trials to browser")
-
-                elif cmd == "trigger":
-                    if tracker is None:
-                        print("  [TRIGGER] ignored — no participant ID yet")
-                        continue
+                if cmd == "trigger":
                     value = str(msg.get("value", "")).replace('"', "'")
                     tracker.user_data(value)
                     print(f"  [TRIGGER] {value}")
-
                 elif cmd == "save_data":
                     data_type = msg.get("data_type", "unknown")
                     content = msg.get("content", "")
@@ -284,11 +275,11 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                     with open(filename, "w", encoding="utf-8") as f:
                         f.write(content)
                     print(f"[DATA] Saved {data_type} to {filename}")
-
+                elif cmd == "participant_id":
+                    id = str(msg.get("value", "")).replace('"', "'")
+                    LOGFILE   = f"gaze_{id}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+                    print(f"[ID] saved {id}")
                 elif cmd == "calibrate":
-                    if tracker is None:
-                        print("[GP] Calibration requested before participant ID — ignoring")
-                        continue
                     avg_error = float("inf")
                     attempts  = 0
 
@@ -317,6 +308,7 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                             }))
                             break
                     else:
+                        # while…else: loop exited because avg_error <= threshold.
                         tracker.start_recording()
                         await ws.send(json.dumps({
                             "type":         "calibration_done",
@@ -326,8 +318,7 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                         }))
 
                 elif cmd == "stop":
-                    if tracker is not None:
-                        tracker.stop_recording()
+                    tracker.stop_recording()
                     stop_event.set()
                     break
 
@@ -341,8 +332,7 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
         await asyncio.gather(forward_gaze(), receive_commands())
     finally:
         stop_event.set()
-        if tracker is not None:
-            tracker.close()
+        tracker.close()
         print(f"[WS] Session ended — {sample_count} total gaze samples sent")
 
 
