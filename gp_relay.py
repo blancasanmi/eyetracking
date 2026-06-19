@@ -162,19 +162,13 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
       - only then poll for the CALIB_RESULT before hiding the window.
     """
     # Clear any stale result so we don't read it as the new one.
-    tracker.calibrate_clear()
-    await asyncio.sleep(0.1)
+    tracker.clear_calibration_result()
+    tracker.calibrate_reset()
 
-    for x, y in CALIB_POINTS:
-        tracker.calibrate_addpoint(x, y)
-        await asyncio.sleep(0.05)
-
-    # Verify the server has all 9 points before starting
-    points = tracker.get_calibration_points()
-    print(f"[CALIB] Server has {len(points)} calibration points registered")
+    # for x, y in CALIB_POINTS:
+    #     tracker.calibrate_addpoint(x, y)
 
     tracker.calibrate_show(True)
-    await asyncio.sleep(0.1)
     tracker.calibrate_start(True)
     print("[GP] Calibration started")
 
