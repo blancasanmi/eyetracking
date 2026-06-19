@@ -298,7 +298,38 @@
 
   const timeline = [];
 
-  // ── 0. Participant ID entry ───────────────────────────────────
+  // ── 0. Instructions ─────────────────────────────────────────────
+
+  timeline.push({
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <div class="instructions">
+        <h2>Expérience de lecture avec suivi eye-tracker</h2>
+        <p>Cette expérience enregistre les mouvements de vos yeux pendant que vous lisez des phrases.</p>
+        <p><strong>Avant de commencer :</strong> Asseyez-vous confortablement à environ 60 cm de l’écran</p>
+        <p>Cliquez sur la touche <strong>ESPACE</strong> pour continuer.</p>
+      </div>
+    `,
+    choices: [" "],
+    on_finish: () => {} // la connexion s'effectue lors de l'essai suivant
+  });
+
+  // ── 1. Connect to relay ────────────────────────────────────────
+
+  timeline.push({
+    type: jsPsychCallFunction,
+    async: true,
+    func: async function (done) {
+      try {
+        await connectGazePoint();
+        done({ success: true });
+      } catch (e) {
+        done({ success: false, error: e.message });
+      }
+    }
+  });
+
+  // ── 2. Participant ID entry (ws is connected by this point) ────
 
   timeline.push({
     type: jsPsychCallFunction,
@@ -335,7 +366,7 @@
         participantId = value;
         jsPsych.data.addProperties({ participant_id: participantId });
         sendTrigger(`participant_id_${participantId}`);
-        sendParticipantID(`id_${participantId}`)
+        sendParticipantID(participantId);
 
         display.innerHTML = '';
         done();
@@ -348,37 +379,8 @@
       input.focus();
     }
   });
-  
-  // ── 1. Connect to relay ────────────────────────────────────────
 
-  timeline.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: `
-      <div class="instructions">
-        <h2>Expérience de lecture avec suivi eye-tracker</h2>
-        <p>Cette expérience enregistre les mouvements de vos yeux pendant que vous lisez des phrases.</p>
-        <p><strong>Avant de commencer :</strong> Asseyez-vous confortablement à environ 60 cm de l’écran</p>
-        <p>Cliquez sur la touche <strong>ESPACE</strong> pour continuer.</p>
-      </div>
-    `,
-    choices: [" "],
-    on_finish: () => {} // la connexion s'effectue lors de l'essai suivant
-  });
-
-  timeline.push({
-    type: jsPsychCallFunction,
-    async: true,
-    func: async function (done) {
-      try {
-        await connectGazePoint();
-        done({ success: true });
-      } catch (e) {
-        done({ success: false, error: e.message });
-      }
-    }
-  });
-
-// ── 2. Calibration ────────────────────────────────────────────
+// ── 3. Calibration ────────────────────────────────────────────
 
     timeline.push({
     type: jsPsychHtmlKeyboardResponse,
@@ -429,7 +431,7 @@
     }
   });
 
-  // ── 3. Gaze check (show dot so participant can verify) ────────
+  // ── 4. Gaze check (show dot so participant can verify) ────────
 
   timeline.push({
     type: jsPsychHtmlKeyboardResponse,
@@ -468,7 +470,7 @@
     }
   });
 
-  // ── 4. Sentence reading trials ────────────────────────────────
+  // ── 5. Sentence reading trials ────────────────────────────────
 
   function makeSentenceTrials(sentence, index) {
     const trialId = `${index}`;
@@ -519,7 +521,7 @@
     };
   }
 
-  // ── 5. Build sentence/catch trials and inject into running timeline ──
+  // ── 6. Build sentence/catch trials and inject into running timeline ──
 
   timeline.push({
     type: jsPsychCallFunction,
