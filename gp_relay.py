@@ -323,14 +323,14 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                             "attempts":     attempts,
                         }))
                     else:
+                        tracker.start_recording()
                         await ws.send(json.dumps({
-                            "type":         "calibration_failed",
-                            "reason":       "max_attempts_reached",
+                            "type":         "calibration_done",
                             "avg_error":    avg_error,
                             "valid_points": valid_points,
                             "attempts":     attempts,
                         }))
-
+                        
                 elif cmd == "stop":
                     tracker.stop_recording()
                     stop_event.set()
