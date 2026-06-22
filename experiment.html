@@ -68,17 +68,31 @@
     margin: 0;
   }
 
-  /* Force the whole button-response trial to fit in the viewport */
+  /* ── Catch trial layout fixes ─────────────────────────────────── */
   .jspsych-html-button-response-stimulus {
-    max-height: 60vh;
+    max-height: none;
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 100%;
   }
 
-  /* Pull buttons up closer */
+  /* The outer wrapper jsPsych creates for button trials */
+  #jspsych-html-button-response-stimulus {
+    width: 100%;
+  }
+
   .jspsych-html-button-response-btngroup {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
     margin-top: 20px;
+  }
+
+  /* Override jsPsych's default button trial container */
+  .jspsych-content {
+    max-width: 100% !important;
+    width: 100% !important;
   }
   
   .jspsych-html-button-response-button button {
@@ -561,24 +575,38 @@
   }
 
   function makeCatchTrialNode(sentence, sentidx, catchidx, type) {
-  const question = `Avez-vous vu la phrase suivante ?<br><br><em>${sentence}</em>`;
-  return {
-    type: jsPsychHtmlButtonResponse,
-    stimulus: `
-      <div style="
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        max-width: 800px;
-        width: 100%;
-        padding: 40px;
-        box-sizing: border-box;
-      ">
-        <div class="sentence-text">${question}</div>
-      </div>
-    `,
-    choices: ["Oui", "Non"],
+    const question = `Avez-vous vu la phrase suivante ?<br><br><em>${sentence}</em>`;
+    return {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `
+        <div style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          width: 90vw;
+          max-width: 90vw;
+          box-sizing: border-box;
+          padding: 40px;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          white-space: normal;
+        ">
+          <div style="
+            font-family: 'Courier New', monospace;
+            font-size: 40px;
+            line-height: 2.2;
+            letter-spacing: 2px;
+            text-align: center;
+            color: #111;
+            width: 100%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            white-space: normal;
+          ">${question}</div>
+        </div>
+      `,
+      choices: ["Oui", "Non"],
       data: { task: "catch", sentence: sentence, catch_index: catchidx, sentence_position: sentidx, catch_type: type },
       on_start: () => sendTrigger(`catch_onset_${catchidx}`),
       on_finish: (data) => {

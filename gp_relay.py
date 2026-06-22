@@ -101,7 +101,7 @@ def load_sentences_from_js(filepath: str) -> tuple[list[str], list[str]]:
     first  = [first[i]  for i in indices]
     second = [second[i] for i in indices]
 
-    with open(f"sentence_order_{LOGFILE}", 'w', newline='', encoding='utf-8') as f:
+    with open(f"data/sentence_order_{LOGFILE}", 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(['first', 'second'])
         writer.writerows(zip(first, second))
