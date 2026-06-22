@@ -61,41 +61,65 @@ def _build_rec_dict(tracker: OpenGazeTracker) -> dict | None:
         if rec is None:
             return None
         return copy.deepcopy(rec)
-    
-def load_sentences_from_js(filepath: str) -> list[str]:
+
+
+def load_sentences_from_js(filepath: str) -> tuple[list[str], list[str]]:
+    """
+    Parse sentences.js and return (sentence_first, sentence_second) as two
+    lists of equal length, where sentence_first[i] / sentence_second[i] form
+    a pair with original index i.
+    """
     with open(filepath, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Extract the array content between [ and ]
-    match = re.search(r'const\s+SENTENCES\s*=\s*\[(.+?)\]', content, re.DOTALL)
-    if not match:
-        raise ValueError("Could not find a 'const sentences = [...]' array in the file.")
+    def extract_array(var_name: str) -> list[str]:
+        match = re.search(
+            rf'const\s+{var_name}\s*=\s*\[(.+?)\]',
+            content,
+            re.DOTALL,
+        )
+        if not match:
+            raise ValueError(f"Could not find 'const {var_name} = [...]' in {filepath}.")
+        sentences = re.findall(r'"([^"]+)"', match.group(1))
+        if not sentences:
+            raise ValueError(f"No sentences found inside {var_name}.")
+        return sentences
 
-    array_content = match.group(1)
+    first  = extract_array("SENTENCE_FIRST")
+    second = extract_array("SENTENCE_SECOND")
 
-    # Extract double-quoted strings only — avoids splitting on French apostrophes
-    sentences = re.findall(r'"([^"]+)"', array_content)
+    if len(first) != len(second):
+        raise ValueError(
+            f"SENTENCE_FIRST ({len(first)}) and SENTENCE_SECOND ({len(second)}) "
+            "must have the same length."
+        )
 
-    if not sentences:
-        raise ValueError("No sentences found inside the array.")
-
-    return sentences
+    return first, second
 
 
 def catch_trial_sentences() -> dict[int, dict]:
-    sentences = load_sentences_from_js("sentences.js")
+    """
+    Build catch trials keyed by *original* index (matches SENTENCE_FIRST /
+    SENTENCE_SECOND indices in the JS).  The HTML shuffles presentation order
+    but always looks up catch trials by original index, so the mapping stays
+    correct regardless of the shuffle.
+
+    Catch sentences are drawn from SENTENCE_FIRST (the 'primary' sentence of
+    each pair), same logic as before.
+    """
+    sentences_first, _ = load_sentences_from_js("sentences.js")
     catch_trials = {}
 
     seen = []
-    unseen_pool = sentences.copy()
+    unseen_pool = sentences_first.copy()
 
     i = 0
-    while i < len(sentences):
+    while i < len(sentences_first):
         interval = random.randint(7, 13)
         catch_position = i + interval
 
-        while i < catch_position and i < len(sentences):
-            sentence = sentences[i]
+        while i < catch_position and i < len(sentences_first):
+            sentence = sentences_first[i]
             seen.append(sentence)
             if sentence in unseen_pool:
                 unseen_pool.remove(sentence)
@@ -114,14 +138,16 @@ def catch_trial_sentences() -> dict[int, dict]:
                     catch_type = "unseen"
                 else:
                     catch_sentence = random.choice(seen)
-                    catch_type = "seen"  # fallback, honestly seen at this point
+                    catch_type = "seen"  # fallback
 
             catch_trials[catch_position] = {
                 "sentence": catch_sentence,
                 "type": catch_type,
             }
+
     print(catch_trials)
     return catch_trials
+
 
 async def _wait_for_calibration_result(
     tracker: OpenGazeTracker,
@@ -151,29 +177,14 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
       6. Return (avg_error, valid_points)
 
     Raises TimeoutError if any point or the final result times out.
-
-    Why this order matters
-    ----------------------
-    calibrate_start() / calibrate_show() are acknowledged immediately by the
-    server, but the actual measurement runs asynchronously.  Closing the
-    window before the result arrives corrupts the session.  We therefore:
-      - use wait_for_calibration_point_start() (run in a thread executor so it
-        doesn't block asyncio) to confirm each point has actually started, and
-      - only then poll for the CALIB_RESULT before hiding the window.
     """
-    # Clear any stale result so we don't read it as the new one.
     tracker.clear_calibration_result()
     tracker.calibrate_reset()
-
-    # for x, y in CALIB_POINTS:
-    #     tracker.calibrate_addpoint(x, y)
 
     tracker.calibrate_show(True)
     tracker.calibrate_start(True)
     print("[GP] Calibration started")
 
-    # wait_for_calibration_point_start() is a blocking call (uses time.sleep
-    # internally), so run it in a thread pool to keep the event loop alive.
     loop = asyncio.get_running_loop()
 
     for i, _ in enumerate(CALIB_POINTS, start=1):
@@ -184,7 +195,6 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
             ),
         )
         if pt_nr is None:
-            # Safe to abort: hide window before raising.
             tracker.calibrate_show(False)
             tracker.calibrate_start(False)
             raise TimeoutError(
@@ -192,13 +202,10 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
             )
         print(f"  [CALIB] Point {pt_nr} at {pos}")
 
-    # All points collected — now wait for the server to send CALIB_RESULT.
     print("[GP] All points collected — waiting for calibration result...")
     result = await _wait_for_calibration_result(tracker)
 
-    # Only close the window once we have (or have given up waiting for) the result.
-
-    await asyncio.sleep(2.0) # added to wait a bit before closing the calibration window, to avoid cutting it off before the result is sent by the server.
+    await asyncio.sleep(2.0)
     tracker.calibrate_show(False)
     tracker.calibrate_start(False)
 
@@ -304,7 +311,6 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                             }))
                             break
                     else:
-                        # while…else: loop exited because avg_error <= threshold.
                         tracker.start_recording()
                         await ws.send(json.dumps({
                             "type":         "calibration_done",
