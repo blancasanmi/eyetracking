@@ -674,13 +674,13 @@
         },
         on_finish: () => {
           const allData = jsPsych.data.get();
-          const catchData = allData.filter({ task: "catch" });
+          const catchData = allData.filter(trial => trial.task === "catch");
 
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "experiment_csv", content: allData.csv() }));
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "catch_trials_csv", content: catchData.csv() }));
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "gaze_json", content: JSON.stringify(gazeLog, null, 2) }));
           // Also save the order used so results can be decoded later
-          ws.send(JSON.stringify({ cmd: "save_data", data_type: "sentence_order_json", content: JSON.stringify(SENTENCE_ORDER) }));
+          // ws.send(JSON.stringify({ cmd: "save_data", data_type: "sentence_order_json", content: JSON.stringify(SENTENCE_ORDER) }));
 
           setTimeout(() => stopExperiment(), 500);
         }
