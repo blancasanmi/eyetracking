@@ -572,7 +572,7 @@
   function makeCatchTrialNode(sentence, sentidx, catchidx, type) {
     const question = `Avez-vous vu la phrase suivante ?<br><br><em>${sentence}</em>`;
     return {
-      type: jsPsychHtmlButtonResponse,
+      type: jsPsychHtmlKeyboardResponse,
       stimulus: `
         <div style="
           display: flex;
@@ -599,16 +599,35 @@
             overflow-wrap: break-word;
             white-space: normal;
           ">${question}</div>
+
+          <div style="
+            display: flex;
+            flex-direction: row;
+            gap: 80px;
+            margin-top: 60px;
+            font-family: 'Courier New', monospace;
+            font-size: 28px;
+            color: #333;
+          ">
+            <div style="text-align:center;">
+              <div style="font-size: 48px;">↑</div>
+              <div>Oui</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size: 48px;">↓</div>
+              <div>Non</div>
+            </div>
+          </div>
         </div>
       `,
-      choices: ["Oui", "Non"],
+      choices: ["ArrowUp", "ArrowDown"],
       data: { task: "catch", sentence: sentence, catch_index: catchidx, sentence_position: sentidx, catch_type: type },
       on_start: () => sendTrigger(`catch_onset_${catchidx}`),
       on_finish: (data) => {
         sendTrigger(`catch_offset_${catchidx}`);
-        data.response_label = data.response === 0 ? "Oui" : "Non";
+        data.response_label = data.response === "ArrowUp" ? "Oui" : "Non";
         data.correct_response = type === "seen" ? "Oui" : "Non";
-        data.correct = data.response === (type === "seen" ? 0 : 1);
+        data.correct = (data.response === "ArrowUp") === (type === "seen");
       }
     };
   }
