@@ -622,9 +622,15 @@
       on_start: () => sendTrigger(`catch_onset_${catchidx}`),
       on_finish: (data) => {
         sendTrigger(`catch_offset_${catchidx}`);
-        data.response_label = data.response === "ArrowUp" ? "Oui" : "Non";
-        data.correct_response = type === "seen" ? "Oui" : "Non";
-        data.correct = (data.response === "ArrowUp") === (type === "seen");
+        const response_label = data.response === "ArrowUp" ? "Oui" : "Non";
+        const correct_response = type === "seen" ? "Oui" : "Non";
+        const correct = (data.response === "ArrowUp") === (type === "seen");
+
+        jsPsych.data.addDataToLastTrial({
+          response_label:   response_label,
+          correct_response: correct_response,
+          correct:          correct
+        });
       }
     };
   }
