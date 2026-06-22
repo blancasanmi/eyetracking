@@ -302,7 +302,6 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                             print(f"[CALIB] Attempt {attempts}: avg_error={avg_error:.4f}, valid_points={valid_points}")
 
                             if avg_error < CALIB_ERROR_THRESH:
-                                success = True
                                 break  # good enough, stop retrying
 
                         except TimeoutError as exc:
@@ -314,23 +313,15 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                             }))
                             break
 
-                    if success:
-                        tracker.start_recording()
-                        await ws.send(json.dumps({
-                            "type":         "calibration_done",
-                            "avg_error":    avg_error,
-                            "valid_points": valid_points,
-                            "attempts":     attempts,
-                        }))
-                    else:
-                        tracker.start_recording()
-                        await ws.send(json.dumps({
-                            "type":         "calibration_done",
-                            "avg_error":    avg_error,
-                            "valid_points": valid_points,
-                            "attempts":     attempts,
-                        }))
-                        
+                    tracker.start_recording()
+                    await ws.send(json.dumps({
+                        "type":         "calibration_done",
+                        "avg_error":    avg_error,
+                        "valid_points": valid_points,
+                        "attempts":     attempts,
+                    }))
+
+
                 elif cmd == "stop":
                     tracker.stop_recording()
                     stop_event.set()
