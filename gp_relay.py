@@ -21,6 +21,7 @@ import time
 import datetime
 import websockets
 import re
+import csv
 
 
 from opengaze import OpenGazeTracker
@@ -100,28 +101,29 @@ def load_sentences_from_js(filepath: str) -> tuple[list[str], list[str]]:
     first  = [first[i]  for i in indices]
     second = [second[i] for i in indices]
 
+    with open(f"sentence_order_{LOGFILE}", 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(['first', 'second'])
+        writer.writerows(zip(first, second))
+
     return first, second
 
 
 def catch_trial_sentences(sentences_first: list[str], sentences_second: list[str]) -> dict[int, dict]:
-    """
-    Build catch trials keyed by position in the already-shuffled
-    sentences_first list. Python owns the shuffle, so these positions
-    match exactly what the browser will display in order.
-    """
-    catch_trials = {}
     catch_trials = {}
 
     seen = []
-    unseen_pool = sentences_first.copy()
+    # Each "full sentence" is the pair joined — unseen pool starts as all pairs
+    full_sentences = [f"{s1} {s2}" for s1, s2 in zip(sentences_first, sentences_second)]
+    unseen_pool = full_sentences.copy()
 
     i = 0
-    while i < len(sentences_first):
+    while i < len(full_sentences):
         interval = random.randint(7, 13)
         catch_position = i + interval
 
-        while i < catch_position and i < len(sentences_first):
-            sentence = sentences_first[i] + sentences_second[i]
+        while i < catch_position and i < len(full_sentences):
+            sentence = full_sentences[i]
             seen.append(sentence)
             if sentence in unseen_pool:
                 unseen_pool.remove(sentence)
@@ -140,7 +142,7 @@ def catch_trial_sentences(sentences_first: list[str], sentences_second: list[str
                     catch_type = "unseen"
                 else:
                     catch_sentence = random.choice(seen)
-                    catch_type = "seen"  # fallback
+                    catch_type = "seen"
 
             catch_trials[catch_position] = {
                 "sentence": catch_sentence,
@@ -149,7 +151,6 @@ def catch_trial_sentences(sentences_first: list[str], sentences_second: list[str
 
     print(catch_trials)
     return catch_trials
-
 
 async def _wait_for_calibration_result(
     tracker: OpenGazeTracker,

@@ -498,9 +498,8 @@
   // ── 4. Sentence reading trials ────────────────────────────────
 
   // presentationIdx = position in the randomized run (0, 1, 2 …)
-  // originalIdx     = the original index into SENTENCE_FIRST / SENTENCE_SECOND
-  function makeSentenceTrials(sentenceFirst, sentenceSecond, presentationIdx, originalIdx) {
-    const trialId = `pres${presentationIdx}_orig${originalIdx}`;
+  function makeSentenceTrials(sentenceFirst, sentenceSecond, presentationIdx) {
+    const trialId = `pres${presentationIdx}`;
     return [
       {
         type: jsPsychHtmlKeyboardResponse,
@@ -523,8 +522,7 @@
           task: "reading",
           sentence_first: sentenceFirst,
           sentence_second: sentenceSecond,
-          presentation_index: presentationIdx,
-          original_index: originalIdx
+          presentation_index: presentationIdx
         },
         on_start: () => sendTrigger(`sentence_onset_${trialId}`),
         on_finish: (data) => {
@@ -580,7 +578,6 @@
         subTimeline.push(...makeSentenceTrials(
           SENTENCES_FIRST[i],
           SENTENCES_SECOND[i],
-          i,
           i
         ));
       }
