@@ -94,20 +94,22 @@ def load_sentences_from_js(filepath: str) -> tuple[list[str], list[str]]:
             "must have the same length."
         )
 
+    # Shuffle pairs together so both arrays share the same new order
+    indices = list(range(len(first)))
+    random.shuffle(indices)
+    first  = [first[i]  for i in indices]
+    second = [second[i] for i in indices]
+
     return first, second
 
 
-def catch_trial_sentences() -> dict[int, dict]:
+def catch_trial_sentences(sentences_first: list[str], sentences_second: list[str]) -> dict[int, dict]:
     """
-    Build catch trials keyed by *original* index (matches SENTENCE_FIRST /
-    SENTENCE_SECOND indices in the JS).  The HTML shuffles presentation order
-    but always looks up catch trials by original index, so the mapping stays
-    correct regardless of the shuffle.
-
-    Catch sentences are drawn from SENTENCE_FIRST (the 'primary' sentence of
-    each pair), same logic as before.
+    Build catch trials keyed by position in the already-shuffled
+    sentences_first list. Python owns the shuffle, so these positions
+    match exactly what the browser will display in order.
     """
-    sentences_first, _ = load_sentences_from_js("sentences.js")
+    catch_trials = {}
     catch_trials = {}
 
     seen = []
@@ -119,7 +121,7 @@ def catch_trial_sentences() -> dict[int, dict]:
         catch_position = i + interval
 
         while i < catch_position and i < len(sentences_first):
-            sentence = sentences_first[i]
+            sentence = sentences_first[i] + sentences_second[i]
             seen.append(sentence)
             if sentence in unseen_pool:
                 unseen_pool.remove(sentence)
@@ -232,14 +234,18 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
     tracker = OpenGazeTracker(ip=GP_HOST, port=GP_PORT, logfile=os.path.join(FOLDER, LOGFILE))
     print(f"[GP] OpenGazeTracker connected to {GP_HOST}:{GP_PORT}")
 
-    # Generate and send catch trials immediately on connection
-    catch_trials = catch_trial_sentences()
-    # Convert int keys to strings for JSON serialization
+    # Load (and shuffle) sentences, then generate catch trials from that order
+    sentences_first, sentences_second = load_sentences_from_js("sentences.js")
+    catch_trials = catch_trial_sentences(sentences_first, sentences_second)
+
+    # Send sentences and catch trials to the browser in one message
     await ws.send(json.dumps({
-        "type": "catch_trials",
-        "data": {str(k): v for k, v in catch_trials.items()}
+        "type": "init",
+        "sentences_first":  sentences_first,
+        "sentences_second": sentences_second,
+        "catch_trials": {str(k): v for k, v in catch_trials.items()},
     }))
-    print(f"[WS] Sent {len(catch_trials)} catch trials to browser")
+    print(f"[WS] Sent {len(sentences_first)} sentence pairs and {len(catch_trials)} catch trials to browser")
 
     stop_event = asyncio.Event()
     sample_count = 0
