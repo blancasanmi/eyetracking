@@ -291,24 +291,20 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                     print(f"[DATA] Saved {data_type} to {filename}")
                 elif cmd == "calibrate":
                     avg_error = float("inf")
-                    attempts  = 0
+                    valid_points = 0
+                    attempts = 0
+                    success = False
 
-                    while avg_error > CALIB_ERROR_THRESH:
-                        if attempts >= MAX_CALIB_ATTEMPTS:
-                            print(
-                                "[GP] Max calibration attempts reached. "
-                                "Check eye-tracker position."
-                            )
-                            await ws.send(json.dumps({
-                                "type":     "calibration_failed",
-                                "reason":   "max_attempts",
-                                "attempts": attempts,
-                            }))
-                            break
-
+                    for _ in range(MAX_CALIB_ATTEMPTS):
                         try:
                             avg_error, valid_points = await _run_calibration(tracker)
                             attempts += 1
+                            print(f"[CALIB] Attempt {attempts}: avg_error={avg_error:.4f}, valid_points={valid_points}")
+
+                            if avg_error < CALIB_ERROR_THRESH:
+                                success = True
+                                break  # good enough, stop retrying
+
                         except TimeoutError as exc:
                             print(f"[GP] {exc}")
                             await ws.send(json.dumps({
@@ -317,10 +313,19 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                                 "detail": str(exc),
                             }))
                             break
-                    else:
+
+                    if success:
                         tracker.start_recording()
                         await ws.send(json.dumps({
                             "type":         "calibration_done",
+                            "avg_error":    avg_error,
+                            "valid_points": valid_points,
+                            "attempts":     attempts,
+                        }))
+                    else:
+                        await ws.send(json.dumps({
+                            "type":         "calibration_failed",
+                            "reason":       "max_attempts_reached",
                             "avg_error":    avg_error,
                             "valid_points": valid_points,
                             "attempts":     attempts,
