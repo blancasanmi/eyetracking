@@ -35,12 +35,12 @@ WS_HOST   = "localhost"
 WS_PORT   = 8765
 
 FOLDER = "data/"
-# LOGFILE   = f"gaze_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+LOGFILE   = f"gaze_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
 
 CALIB_POINTS: list[tuple[float, float]] = [
-    (0.1,  0.1), (0.5,  0.1), (0.9,  0.1),
-    (0.1,  0.5), (0.5,  0.5), (0.9,  0.5),
-    (0.1,  0.9), (0.5,  0.9), (0.9,  0.9),
+    (0.5,  0.1),
+    (0.05, 0.5), (0.5, 0.5), (0.95, 0.5),
+    (0.5,  0.9),
 ]
 
 MAX_CALIB_ATTEMPTS   = 2
@@ -275,10 +275,6 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                     with open(filename, "w", encoding="utf-8") as f:
                         f.write(content)
                     print(f"[DATA] Saved {data_type} to {filename}")
-                elif cmd == "participant_id":
-                    id = str(msg.get("value", "")).replace('"', "'")
-                    LOGFILE   = f"gaze_{id}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
-                    print(f"[ID] saved {id}")
                 elif cmd == "calibrate":
                     avg_error = float("inf")
                     attempts  = 0
