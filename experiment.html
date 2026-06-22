@@ -11,27 +11,53 @@
   <script src="sentences.js"></script>
 
   <style>
-  /* ── Sentence display ─────────────────────────────────────── */
+  html, body {
+    height: 100vh;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+  }
+
+  #jspsych-content, .jspsych-display-element {
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .jspsych-html-button-response-stimulus {
+    /* remove the old max-height/flex rules */
+    max-height: none;
+    display: block;
+  }
+
+  .jspsych-html-button-response-btngroup {
+    margin-top: 20px;  /* tight gap between sentence and buttons */
+  }
+
   .sentence-container {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 50vh;
-    width: 100vw;
+    /* remove height: 50vh — let content size itself */
+    height: auto;
+    width: 100%;
     padding: 40px;
     box-sizing: border-box;
-    gap: 60px;
+    gap: 40px;
   }
 
   .sentence-text {
     font-family: 'Courier New', monospace;
-    font-size: 40px;
+    font-size: clamp(1.2rem, 2.5vw, 2.2rem);  /* responsive, never overflows */
     line-height: 2.2;
     letter-spacing: 2px;
     text-align: center;
     color: #111;
-    max-width: 90vw;
+    max-width: 800px;   /* long sentences wrap instead of overflowing */
+    width: 100%;
   }
 
   .sentence-divider {
@@ -534,15 +560,24 @@
   }
 
   function makeCatchTrialNode(sentence, sentidx, catchidx, type) {
-    const question = `Avez-vous vu la phrase suivante ?<br><br><em>${sentence}</em>`;
-    return {
-      type: jsPsychHtmlButtonResponse,
-      stimulus: `
-        <div class="sentence-container">
-          <div class="sentence-text">${question}</div>
-        </div>
-      `,
-      choices: ["Oui", "Non"],
+  const question = `Avez-vous vu la phrase suivante ?<br><br><em>${sentence}</em>`;
+  return {
+    type: jsPsychHtmlButtonResponse,
+    stimulus: `
+      <div style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        max-width: 800px;
+        width: 100%;
+        padding: 40px;
+        box-sizing: border-box;
+      ">
+        <div class="sentence-text">${question}</div>
+      </div>
+    `,
+    choices: ["Oui", "Non"],
       data: { task: "catch", sentence: sentence, catch_index: catchidx, sentence_position: sentidx, catch_type: type },
       on_start: () => sendTrigger(`catch_onset_${catchidx}`),
       on_finish: (data) => {
