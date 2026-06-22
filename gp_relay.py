@@ -1,348 +1,594 @@
-"""
-GazePoint WebSocket Relay (v3)
-==============================
-Requires: pip install websockets lxml
+<html>
+<head>
+  <title>Eye-Tracking Reading Experiment</title>
+  <script src="https://unpkg.com/jspsych@7.3.4"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.3"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.3"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-call-function@1.1.3"></script>
+  <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+  <link rel="stylesheet" href="style.css" type="text/css">
+  <script src="sentences.js"></script>
 
-Delegates all tracker I/O to OpenGazeTracker (opengaze.py).
-No raw sockets here — the tracker class owns the connection.
+  <style>
+  /* ── Sentence display ─────────────────────────────────────── */
+  .sentence-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 50vh;
+    width: 100vw;
+    padding: 40px;
+    box-sizing: border-box;
+  }
 
-Usage:
-  1. Start Gazepoint Control
-  2. python gp_relay.py
-  3. Open experiment in browser  →  ws://localhost:8765
-"""
+  .sentence-text {
+    font-family: 'Courier New', monospace;
+    font-size: 40px;           /* reduced from 64px */
+    line-height: 2.2;
+    letter-spacing: 2px;
+    text-align: center;
+    color: #111;
+    max-width: 90vw;
+  }
 
-import asyncio
-import json
-import copy
-import os
-import random
-import time
-import datetime
-import websockets
-import re
+  /* Force the whole button-response trial to fit in the viewport */
+  .jspsych-html-button-response-stimulus {
+    max-height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
+  /* Pull buttons up closer */
+  .jspsych-html-button-response-btngroup {
+    margin-top: 20px;  /* instead of whatever large default it has */
+  }
+  
+  .jspsych-html-button-response-button button {
+    font-family: 'Courier New', monospace;
+    font-size: 22px;
+    padding: 20px 60px;
+    border-radius: 6px;
+    margin: 0 15px;
+    cursor: pointer;
+  }
 
-from opengaze import OpenGazeTracker
+  /* ── Gaze cursor overlay ──────────────────────────────────── */
+  #gaze-dot {
+    position: fixed;
+    width: 20px;
+    height: 20px;
+    background: rgba(255, 0, 0, 0.5);
+    border-radius: 50%;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    z-index: 99999;
+    display: none;
+  }
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
+  .calib-dot {
+    position: fixed;
+    width: 30px;
+    height: 30px;
+    background: red;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10000;
+  }
 
-GP_HOST   = "127.0.0.1"
-GP_PORT   = 4242
-WS_HOST   = "localhost"
-WS_PORT   = 8765
+  .instructions {
+    font-size: 24px;
+    max-width: 800px;
+    line-height: 1.6;
+  }
 
-FOLDER = "data/"
-LOGFILE   = f"gaze_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+  /* ── Consent form ─────────────────────────────────────────── */
+  #container-consent {
+    padding: 40px;
+    max-width: 900px;
+    margin: auto;
+    overflow-y: auto;
+    max-height: 100vh;
+  }
+</style>
+</head>
+<body>
+  <div id="gaze-dot"></div>
 
-CALIB_POINTS: list[tuple[float, float]] = [
-    (0.5,  0.1),
-    (0.05, 0.5), (0.5, 0.5), (0.95, 0.5),
-    (0.5,  0.9),
-]
+  <script>
+  // ═══════════════════════════════════════════════════════════════
+  //  CONFIGURATION
+  // ═══════════════════════════════════════════════════════════════
 
-MAX_CALIB_ATTEMPTS   = 2
-CALIB_ERROR_THRESH   = 20.0   # accept calibration below this average error
-CALIB_POINT_TIMEOUT  = 15.0  # seconds to wait per calibration point
-CALIB_RESULT_TIMEOUT = 10.0  # seconds to wait for final result after last point
+  const WS_URL = "ws://localhost:8765";
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+  const SHOW_GAZE_DOT = true;
 
-def _build_rec_dict(tracker: OpenGazeTracker) -> dict | None:
-    """Return a snapshot of the latest REC sample, or None."""
-    with tracker._inlock:
-        if "REC" not in tracker._incoming:
-            return None
-        rec = tracker._incoming["REC"].get("NO_ID")
-        if rec is None:
-            return None
-        return copy.deepcopy(rec)
-    
-def load_sentences_from_js(filepath: str) -> list[str]:
-    with open(filepath, "r", encoding="utf-8") as f:
-        content = f.read()
+  // ═══════════════════════════════════════════════════════════════
+  //  WEBSOCKET + GAZE HANDLING
+  // ═══════════════════════════════════════════════════════════════
 
-    # Extract the array content between [ and ]
-    match = re.search(r'const\s+SENTENCES\s*=\s*\[(.+?)\]', content, re.DOTALL)
-    if not match:
-        raise ValueError("Could not find a 'const sentences = [...]' array in the file.")
+  let ws = null;
+  let gazeLog = [];
+  let connected = false;
+  let showGazeDot = true;
+  let catchTrials = {};
+  let catchTrialsReceived = false;
+  let onCatchTrialsReceived = null;
 
-    array_content = match.group(1)
+  function ensureGazeDot() {
+    let dot = document.getElementById("gaze-dot");
+    if (!dot) {
+      dot = document.createElement("div");
+      dot.id = "gaze-dot";
+      dot.style.cssText = "position:fixed;width:20px;height:20px;background:rgba(255,0,0,0.5);border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);z-index:99999;";
+      document.body.appendChild(dot);
+    }
+    return dot;
+  }
 
-    # Extract double-quoted strings only — avoids splitting on French apostrophes
-    sentences = re.findall(r'"([^"]+)"', array_content)
+  function connectGazePoint() {
+    return new Promise((resolve, reject) => {
+      ws = new WebSocket(WS_URL);
 
-    if not sentences:
-        raise ValueError("No sentences found inside the array.")
+      ws.onopen = () => {
+        connected = true;
+        console.log("[GP] WebSocket connected");
+        resolve();
+      };
 
-    return sentences
+      ws.onerror = (e) => {
+        console.error("[GP] WebSocket error", e);
+        reject(e);
+      };
 
+      ws.onclose = () => {
+        connected = false;
+        console.log("[GP] WebSocket closed");
+      };
 
-def catch_trial_sentences() -> dict[int, dict]:
-    sentences = load_sentences_from_js("sentences.js")
-    catch_trials = {}
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "catch_trials") {
+          catchTrials = msg.data;
+          catchTrialsReceived = true;
+          console.log("Catch trials received:", catchTrials);
+          if (onCatchTrialsReceived) onCatchTrialsReceived();
+        }
+        if (msg.type === "gaze" && msg.data) {
+          const d = msg.data;
+          const sample = {
+            fpogx: parseFloat(d.FPOGX),
+            fpogy: parseFloat(d.FPOGY),
+            fpogd: parseFloat(d.FPOGD || 0),
+            fpogv: parseInt(d.FPOGV || 0),
+            fpogid: parseInt(d.FPOGID || 0),
+            bpogx: parseFloat(d.BPOGX || d.FPOGX),
+            bpogy: parseFloat(d.BPOGY || d.FPOGY),
+            bpogv: parseInt(d.BPOGV || 0),
+            time: parseFloat(d.TIME || 0),
+            user_data: d.USER_DATA || "",
+            local_ts: performance.now()
+          };
+          gazeLog.push(sample);
 
-    seen = []
-    unseen_pool = sentences.copy()
-
-    i = 0
-    while i < len(sentences):
-        interval = random.randint(7, 13)
-        catch_position = i + interval
-
-        while i < catch_position and i < len(sentences):
-            sentence = sentences[i]
-            seen.append(sentence)
-            if sentence in unseen_pool:
-                unseen_pool.remove(sentence)
-            i += 1
-
-        if i >= catch_position:
-            use_seen = random.random() < 0.5 and len(seen) >= 1
-
-            if use_seen:
-                recent = seen[-5:]
-                catch_sentence = random.choice(recent)
-                catch_type = "seen"
-            else:
-                if unseen_pool:
-                    catch_sentence = random.choice(unseen_pool)
-                    catch_type = "unseen"
-                else:
-                    catch_sentence = random.choice(seen)
-                    catch_type = "seen"  # fallback, honestly seen at this point
-
-            catch_trials[catch_position] = {
-                "sentence": catch_sentence,
-                "type": catch_type,
+          if (SHOW_GAZE_DOT && showGazeDot) {
+            const dot = ensureGazeDot();
+            if (sample.fpogv) {
+              dot.style.display = "block";
+              dot.style.left = (sample.fpogx * window.innerWidth) + "px";
+              dot.style.top  = (sample.fpogy * window.innerHeight) + "px";
+            } else {
+              dot.style.display = "none";
             }
-    print(catch_trials)
-    return catch_trials
+          }
+        }
+      };
+    });
+  }
 
-async def _wait_for_calibration_result(
-    tracker: OpenGazeTracker,
-    timeout: float = CALIB_RESULT_TIMEOUT,
-) -> list[dict] | None:
-    """
-    Poll get_calibration_result() until the server's <CAL ID="CALIB_RESULT"/>
-    message has been parsed into tracker._incoming, or until timeout.
-    """
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        result = tracker.get_calibration_result()
-        if result is not None:
-            return result
-        await asyncio.sleep(0.1)
-    return None
+  function sendTrigger(label) {
+    if (ws && connected) {
+      ws.send(JSON.stringify({ cmd: "trigger", value: label }));
+      console.log("[TRIGGER]", label);
+    }
+  }
 
+  function startCalibration() {
+    if (ws && connected) {
+      ws.send(JSON.stringify({ cmd: "calibrate" }));
+    }
+  }
 
-async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
-    """
-    Run one full calibration pass:
-      1. Reset + add points
-      2. Show window + start calibration
-      3. Wait for every point to start (confirms the sequence is live)
-      4. Wait for CALIB_RESULT to arrive  (server signals completion)
-      5. Hide window + stop calibration
-      6. Return (avg_error, valid_points)
+  function stopExperiment() {
+    if (ws && connected) {
+      ws.send(JSON.stringify({ cmd: "stop" }));
+      ws.close();
+    }
+  }
 
-    Raises TimeoutError if any point or the final result times out.
+  function makeRecalibrationNode(sentidx) {
+  return [
+    {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `
+        <div class="instructions">
+          <h2>Pause — Recalibration</h2>
+          <p>Nous allons recalibrer le suivi oculaire.</p>
+          <p>Appuyez sur <strong>ESPACE</strong> pour lancer la recalibration.</p>
+        </div>
+      `,
+      choices: [" "],
+      on_start: () => sendTrigger(`recalibration_prompt_${sentidx}`)
+    },
+    {
+      type: jsPsychCallFunction,
+      async: true,
+      func: function(done) {
+        const originalOnMessage = ws.onmessage;
 
-    Why this order matters
-    ----------------------
-    calibrate_start() / calibrate_show() are acknowledged immediately by the
-    server, but the actual measurement runs asynchronously.  Closing the
-    window before the result arrives corrupts the session.  We therefore:
-      - use wait_for_calibration_point_start() (run in a thread executor so it
-        doesn't block asyncio) to confirm each point has actually started, and
-      - only then poll for the CALIB_RESULT before hiding the window.
-    """
-    # Clear any stale result so we don't read it as the new one.
-    tracker.clear_calibration_result()
-    tracker.calibrate_reset()
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+          if (msg.type === "calibration_done" || msg.type === "calibration_result") {
+            console.log("[RECALIB] Done at sentence", sentidx);
+            ws.onmessage = originalOnMessage;
+            done();
+          } else {
+            if (typeof originalOnMessage === "function") originalOnMessage(event);
+          }
+        };
 
-    # for x, y in CALIB_POINTS:
-    #     tracker.calibrate_addpoint(x, y)
+        startCalibration();
+        sendTrigger(`recalibration_start_${sentidx}`);
+      }
+    },
+    {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: `
+        <div class="instructions">
+          <h2>Recalibration terminée</h2>
+          <p>Appuyez sur <strong>ESPACE</strong> pour continuer la lecture.</p>
+        </div>
+      `,
+      choices: [" "]
+    }
+  ];
+}
 
-    tracker.calibrate_show(True)
-    tracker.calibrate_start(True)
-    print("[GP] Calibration started")
+  // ═══════════════════════════════════════════════════════════════
+  //  jsPsych EXPERIMENT
+  // ═══════════════════════════════════════════════════════════════
 
-    # wait_for_calibration_point_start() is a blocking call (uses time.sleep
-    # internally), so run it in a thread pool to keep the event loop alive.
-    loop = asyncio.get_running_loop()
+  const jsPsych = initJsPsych({
+  on_finish: function () {
+    const allData = jsPsych.data.get();
 
-    for i, _ in enumerate(CALIB_POINTS, start=1):
-        pt_nr, pos = await loop.run_in_executor(
-            None,
-            lambda: tracker.wait_for_calibration_point_start(
-                timeout=CALIB_POINT_TIMEOUT
-            ),
-        )
-        if pt_nr is None:
-            # Safe to abort: hide window before raising.
-            tracker.calibrate_show(False)
-            tracker.calibrate_start(False)
-            raise TimeoutError(
-                f"Timed out waiting for calibration point {i} to start."
-            )
-        print(f"  [CALIB] Point {pt_nr} at {pos}")
+    if (typeof jatos !== "undefined") {
+      jatos.submitResultData(JSON.stringify({
+        jspsych: allData.json(),
+        gaze: gazeLog
+      }), jatos.startNextComponent);
+    }
+  }
+  });
 
-    # All points collected — now wait for the server to send CALIB_RESULT.
-    print("[GP] All points collected — waiting for calibration result...")
-    result = await _wait_for_calibration_result(tracker)
+  const timeline = [];
 
-    # Only close the window once we have (or have given up waiting for) the result.
+  // ── 0. Consent Form ───────────────────────────────────────────
 
-    await asyncio.sleep(2.0) # added to wait a bit before closing the calibration window, to avoid cutting it off before the result is sent by the server.
-    tracker.calibrate_show(False)
-    tracker.calibrate_start(False)
+  timeline.push({
+    type: jsPsychCallFunction,
+    async: true,
+    func: function(done) {
+      const display = jsPsych.getDisplayElement();
+      display.innerHTML = `
+        <div id="container-consent">
+          <div id="consent">
+            <h1>Nous avons besoin de votre consentement pour procéder</h1>
+            <hr>
+            <div align="left" class="legal well">
+              <p align="center"><strong>Feuille d'information pour les participants</strong></p>
+              <p>Titre de l'étude : <strong>Suspense: Analyse à l'eye-tracker</strong></p>
 
-    if result is None:
-        raise TimeoutError(
-            "All calibration points completed but no result arrived in time."
-        )
+              <p>
+                Nous souhaitons vous inviter à participer à ce projet de recherche qui porte sur l'évaluation de suspense dans la lecture.<br>
+                L'expérience va durer environ 1 heure. Nous vous demanderons de faire certaines ou toutes les choses suivantes lors de l'expérience :<br>
+                1) Lire des séquences de phrases<br>
+                2) Répondre à des questionnaires<br>
+              </p>
 
-    avg_error_str, valid_points_str = tracker.calibrate_result_summary()
-    avg_error    = float(avg_error_str)         if avg_error_str    is not None else 9999.0
-    valid_points = int(float(valid_points_str)) if valid_points_str is not None else 0
+              <p><strong>Chercheurs</strong></p>
+              <p>Blanca San Millan Peralta, étudiante en Master Intelligence Artificielle et Société à Université PSL, Université Panthéon-Sorbonne, uncertaintysuspense@gmail.com<br>
+                Dr. Bastien Blain, Centre d'économie de la Sorbonne, Université Panthéon-Sorbonne, uncertaintysuspense@gmail.com
+              </p>
 
-    print(f"[GP] Calibration result: avg_error={avg_error:.4f}  valid_points={valid_points}")
-    return avg_error, valid_points
+              <p><strong>Rémunération du participant / Paiement du sujet</strong></p>
+              <p>La participation à ce projet de recherche est volontaire.</p>
 
+              <p><strong>Droits du sujet et retrait de l'étude</strong></p>
+              <p>Vous devez participer à cette étude uniquement si vous le souhaitez ; choisir de ne pas participer ne vous désavantagera en aucune façon et vous ne subirez aucune pénalité. Avant de décider si vous souhaitez participer, veuillez lire attentivement cette feuille d'information. N'hésitez pas à en discuter avec d'autres personnes si vous le souhaitez. Demandez-nous s'il y a quelque chose qui n'est pas clair ou si vous souhaitez obtenir plus d'informations. Si vous acceptez de participer, veuillez remplir le formulaire de consentement ci-dessous. Après avoir signé ce formulaire de consentement et accepté de participer, vous pouvez encore vous retirer à tout moment sans donner de raisons.</p>
 
-# ---------------------------------------------------------------------------
-# WebSocket handler
-# ---------------------------------------------------------------------------
+              <p><strong>Avis de protection des données et de la confidentialité</strong></p>
+              <p>Vos données sont anonymes et stockées en toute sécurité sur un serveur du CNRS. Si nous sommes en mesure d'anonymiser ou de pseudonymiser vos données personnelles, nous le ferons et nous nous efforcerons de minimiser le traitement de vos données personnelles chaque fois que cela est possible.</p>
 
-async def handler(ws: websockets.WebSocketServerProtocol) -> None:
-    print("[WS] Browser connected")
+              <p><strong>Confidentialité</strong></p>
+              <p>Il est prévu que la recherche proposée ne génère pas de résultats exploitables commercialement. Les informations suivantes pourraient également être obtenues : le genre, la date de naissance, le niveau d'éducation. Afin que vos données restent anonymes, un code y sera attaché. Ainsi, vous ne serez pas identifiable dans la rédaction ou toute autre publication/présentation qui pourrait résulter de cette étude.</p>
 
-    tracker = OpenGazeTracker(ip=GP_HOST, port=GP_PORT, logfile=os.path.join(FOLDER, LOGFILE))
-    print(f"[GP] OpenGazeTracker connected to {GP_HOST}:{GP_PORT}")
+              <p align="center"><strong>FORMULAIRE DE CONSENTEMENT</strong></p>
+              <p><strong>Titre de l'étude</strong>: Suspense: Analyse à l'eye-tracker</p>
+              <p><strong>Department</strong>: Sorbonne Economic Center, Pantheon-Sorbonne University, Paris</p>
+              <p><strong>Nom et Contact du Chercheur</strong>: Blanca San Millan Peralta, Master Intelligence Artificielle et Société, Université PSL and Pantheon-Sorbonne University, blanca.sanmillanperalta@psl.eu</p>
+              <p><strong>Nom et Contact du Superviseur</strong>: Dr. Bastien Blain, Sorbonne Economic Center, Pantheon-Sorbonne University, uncertaintysuspense@gmail.com</p>
 
-    # Generate and send catch trials immediately on connection
-    catch_trials = catch_trial_sentences()
-    # Convert int keys to strings for JSON serialization
-    await ws.send(json.dumps({
-        "type": "catch_trials",
-        "data": {str(k): v for k, v in catch_trials.items()}
-    }))
-    print(f"[WS] Sent {len(catch_trials)} catch trials to browser")
+              <p>Nous vous remercions de considérer une potentielle participation à cette recherche. La personne organisant l'étude doit vous expliquer le projet avant que vous acceptiez de participer. Si vous avez des questions découlant de la fiche d'information ou de l'explication qui vous a déjà été donnée, veuillez les poser au chercheur avant de décider si vous souhaitez participer. Une copie de ce formulaire de consentement vous sera remise pour que vous puissiez la conserver et vous y référer à tout moment.</p>
 
-    stop_event = asyncio.Event()
-    sample_count = 0
+              <ol>
+                <li>Je confirme avoir lu et compris la fiche d'information pour l'étude. J'ai eu l'occasion de considérer les informations et ce qui est attendu de moi. J'ai également eu la possibilité de poser des questions auxquelles j'ai reçu des réponses claires.</li>
+                <br><li>Je consens à participer à l'étude. Je comprends que mes informations personnelles seront utilisées aux fins qui m'ont été expliquées.</li>
+                <br><li>Je comprends que toutes les informations personnelles resteront confidentielles et que tous les efforts seront déployés pour que je ne sois pas identifiable.</li>
+                <br><li>Je comprends que mes données recueillies dans cette étude seront stockées de manière anonyme et sécurisée. Il ne sera pas possible de m'identifier dans les publications.</li>
+                <br><li>Je comprends les risques potentiels de ma participation et je suis conscient du soutien qui me sera offert si je suis en détresse pendant le cours de la recherche.</li>
+                <br><li>Aucune promesse ou garantie de bénéfices ne m'a été faite pour m'encourager à participer.</li>
+                <br><li>Je comprends que les données ne seront pas mises à la disposition d'organisations commerciales mais sont exclusivement la responsabilité du ou des chercheurs qui entreprennent cette étude.</li>
+                <br><li>Je comprends que je ne bénéficierai pas financièrement de cette étude ou de tout résultat possible qui en découlerait à l'avenir.</li>
+                <br><li>Je comprends que je serai indemnisé pour la partie du temps consacrée à l'étude (si applicable).</li>
+                <br><li>J'accepte que mes données anonymisées puissent être utilisées par d'autres pour des recherches futures (personne ne pourra vous identifier lorsque ces données seront partagées).</li>
+                <br><li>Je comprends que les informations que j'ai fournies pourront être publiées dans un rapport.</li>
+                <br><li>Je confirme que je comprends les critères d'inclusion tels que détaillés dans la fiche d'information.</li>
+                <br><li>Je sais qui je dois contacter si je souhaite déposer une plainte.</li>
+                <br><li>Je suis d'accord que mes données soient archivées. Je comprends que d'autres chercheurs authentifiés de l'Université Panthéon-Sorbonne auront accès à mes données anonymisées.</li>
+              </ol>
 
-    # ------------------------------------------------------------------
-    # Task: forward gaze samples to the browser
-    # ------------------------------------------------------------------
-    async def forward_gaze() -> None:
-        nonlocal sample_count
-        while not stop_event.is_set():
-            rec = _build_rec_dict(tracker)
-            if rec is not None:
-                try:
-                    await ws.send(json.dumps({"type": "gaze", "data": rec}))
-                    sample_count += 1
-                    if sample_count % 5000 == 0:
-                        print(f"  [GP] {sample_count} gaze samples forwarded")
-                except websockets.ConnectionClosed:
-                    stop_event.set()
-                    return
-            await asyncio.sleep(0.005)   # ~200 Hz ceiling
+              <button type="button" class="btn btn-default btn-sm" onClick="window.print();">
+                Imprimer une copie
+              </button>
+            </div>
 
-    # ------------------------------------------------------------------
-    # Task: receive commands from the browser
-    # ------------------------------------------------------------------
-    async def receive_commands() -> None:
-        try:
-            async for raw in ws:
-                msg = json.loads(raw)
-                cmd = msg.get("cmd")
+            <br>
+            <center>
+              <button type="button" class="btn btn-primary btn-lg" id="continue_btn">Je consens</button>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              <button type="button" class="btn btn-danger btn-lg" onclick="window.location='http://www.prolific.ac'">Non merci, je ne souhaite pas participer</button>
+            </center>
+            <br>
+          </div>
+        </div>
+      `;
 
-                if cmd == "trigger":
-                    value = str(msg.get("value", "")).replace('"', "'")
-                    tracker.user_data(value)
-                    print(f"  [TRIGGER] {value}")
-                elif cmd == "save_data":
-                    data_type = msg.get("data_type", "unknown")
-                    content = msg.get("content", "")
-                    filename = os.path.join(FOLDER, f"{data_type}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.{'csv' if 'csv' in data_type else 'json'}")
-                    with open(filename, "w", encoding="utf-8") as f:
-                        f.write(content)
-                    print(f"[DATA] Saved {data_type} to {filename}")
-                elif cmd == "calibrate":
-                    avg_error = float("inf")
-                    attempts  = 0
+      document.getElementById('continue_btn').addEventListener('click', () => {
+        display.innerHTML = '';
+        done();
+      });
+    }
+  });
+  
+  // ── 1. Connect to relay ────────────────────────────────────────
 
-                    while avg_error > CALIB_ERROR_THRESH:
-                        if attempts >= MAX_CALIB_ATTEMPTS:
-                            print(
-                                "[GP] Max calibration attempts reached. "
-                                "Check eye-tracker position."
-                            )
-                            await ws.send(json.dumps({
-                                "type":     "calibration_failed",
-                                "reason":   "max_attempts",
-                                "attempts": attempts,
-                            }))
-                            break
+  timeline.push({
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <div class="instructions">
+        <h2>Expérience de lecture avec suivi eye-tracker</h2>
+        <p>Cette expérience enregistre les mouvements de vos yeux pendant que vous lisez des phrases.</p>
+        <p><strong>Avant de commencer :</strong> Asseyez-vous confortablement à environ 60 cm de l’écran</p>
+        <p>Cliquez sur la touche <strong>ESPACE</strong> pour continuer.</p>
+      </div>
+    `,
+    choices: [" "],
+    on_finish: () => {} // la connexion s'effectue lors de l'essai suivant
+  });
 
-                        try:
-                            avg_error, valid_points = await _run_calibration(tracker)
-                            attempts += 1
-                        except TimeoutError as exc:
-                            print(f"[GP] {exc}")
-                            await ws.send(json.dumps({
-                                "type":   "calibration_failed",
-                                "reason": "timeout",
-                                "detail": str(exc),
-                            }))
-                            break
-                    else:
-                        # while…else: loop exited because avg_error <= threshold.
-                        tracker.start_recording()
-                        await ws.send(json.dumps({
-                            "type":         "calibration_done",
-                            "avg_error":    avg_error,
-                            "valid_points": valid_points,
-                            "attempts":     attempts,
-                        }))
+  timeline.push({
+    type: jsPsychCallFunction,
+    async: true,
+    func: async function (done) {
+      try {
+        await connectGazePoint();
+        done({ success: true });
+      } catch (e) {
+        done({ success: false, error: e.message });
+      }
+    }
+  });
 
-                elif cmd == "stop":
-                    tracker.stop_recording()
-                    stop_event.set()
-                    break
+// ── 2. Calibration ────────────────────────────────────────────
 
-        except websockets.ConnectionClosed:
-            stop_event.set()
+    timeline.push({
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <div class="instructions">
+        <h2>Calibration</h2>
+        <p>Un écran de calibration apparaîtra dans la fenêtre.</p>
+        <p>Suivez le point en mouvement avec vos yeux (sans bouger la tête) et sans prédire où il va.</p>
+        <p>Si la calibration échoue, une deuxième tentative sera effectuée.</p>
+        <p>Si celle ci échoue également, l'expérience sera interrompue.</p>
+        <p>Appelez alors l'administrateur.</p>
+        <p>Appuyez sur la touche <strong>ESPACE</strong> pour lancer la calibration et attendez 2 secondes.</p>
+      </div>
+    `,
+    choices: [" "]
+  });
 
-    # ------------------------------------------------------------------
-    # Run both tasks concurrently; clean up on exit
-    # ------------------------------------------------------------------
-    try:
-        await asyncio.gather(forward_gaze(), receive_commands())
-    finally:
-        stop_event.set()
-        tracker.close()
-        print(f"[WS] Session ended — {sample_count} total gaze samples sent")
+  timeline.push({
+    type: jsPsychCallFunction,
+    async: true,
+    func: function(done) {
+      // 1. Capture the original handler before changing it
+      const originalOnMessage = ws.onmessage;
+      
+      // 2. Set up the dynamic listener first
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        
+        // Fix: Check for 'calibration_done' instead of 'calibration_result'
+        if (msg.type === "calibration_done" || msg.type === "calibration_result") {
+          console.log("[CALIB] Complete structure received:", msg.data);
+          
+          // Restore original listener safely
+          ws.onmessage = originalOnMessage; 
+          done(); // Tell jsPsych to move forward
+        } else {
+          // Pass normal data packets through to avoid losing samples during tracking setup
+          if (typeof originalOnMessage === "function") {
+            originalOnMessage(event);
+          }
+        }
+      };
 
+      // 3. Fire the command NOW that our ears are open
+      console.log("[CALIB] Launching calibration routine...");
+      startCalibration();
+      sendTrigger("calibration_start");
+    }
+  });
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
+  // ── 3. Gaze check (show dot so participant can verify) ────────
 
-async def main() -> None:
-    print(f"[WS] Relay listening on ws://{WS_HOST}:{WS_PORT}")
-    print("     Waiting for browser to connect...")
+  timeline.push({
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <div class="instructions">
+        <h2>Vérification du suivi oculaire</h2>
+        <p>Vous devriez voir un <span style="color:red;">point rouge</span> suivre votre regard.</p>
+        <p>Regardez différentes zones de l’écran pour vérifier que le suivi fonctionne correctement.</p>
+        <p>Le point disparaîtra une fois l'expérience commencée.</p>
+        <p>Appuyez sur la touche <strong>ESPACE</strong> lorsque vous êtes prêt(e) à commencer.</p>
+      </div>
+    `,
+    choices: [" "],
+    on_start: () => {
+      showGazeDot = true;
+    }
+  });
 
-    async with websockets.serve(handler, WS_HOST, WS_PORT):
-        await asyncio.Future()
+  // Wait for catch_trials from server (5 s timeout → start without them)
+  timeline.push({
+    type: jsPsychCallFunction,
+    async: true,
+    func: function(done) {
+      if (catchTrialsReceived) {
+        done();
+      } else {
+        const timeout = setTimeout(() => {
+          onCatchTrialsReceived = null;
+          done();
+        }, 5000);
+        onCatchTrialsReceived = () => {
+          clearTimeout(timeout);
+          done();
+        };
+      }
+    }
+  });
 
+  // ── 4. Sentence reading trials ────────────────────────────────
 
-if __name__ == "__main__":
-    asyncio.run(main())
+  function makeSentenceTrials(sentence, index) {
+    const trialId = `${index}`;
+    return [
+      {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: '<div style="font-size:80px;text-align:center;">+</div>',
+        choices: "NO_KEYS",
+        trial_duration: 1000,
+        on_start: () => sendTrigger(`fixation_onset_${trialId}`)
+      },
+      {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `
+          <div class="sentence-container">
+            <div class="sentence-text">${sentence}</div>
+          </div>
+        `,
+        choices: [" "],
+        data: { task: "reading", sentence: sentence, trial_index: index },
+        on_start: () => sendTrigger(`sentence_onset_${trialId}`),
+        on_finish: (data) => {
+          sendTrigger(`sentence_offset_${trialId}`);
+          data.rt_ms = data.rt;
+        }
+      }
+    ];
+  }
+
+  function makeCatchTrialNode(sentence, sentidx, catchidx, type) {
+    const question = `Avez-vous vu la phrase suivante ?<br><br><em>${sentence}</em>`;
+    return {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: `
+        <div class="sentence-container">
+          <div class="sentence-text">${question}</div>
+        </div>
+      `,
+      choices: ["Oui", "Non"],
+      data: { task: "catch", sentence: sentence, catch_index: catchidx, sentence_position: sentidx, catch_type: type },
+      on_start: () => sendTrigger(`catch_onset_${catchidx}`),
+      on_finish: (data) => {
+        sendTrigger(`catch_offset_${catchidx}`);
+        data.response_label = data.response === 0 ? "Oui" : "Non";
+        data.correct_response = type === "seen" ? "Oui" : "Non";
+        data.correct = data.response === (type === "seen" ? 0 : 1);
+      }
+    };
+  }
+
+  // ── 5. Build sentence/catch trials and inject into running timeline ──
+
+  timeline.push({
+    type: jsPsychCallFunction,
+    func: function() {
+      const subTimeline = [];
+      let catchIdx = 0;
+
+      for (let sentidx = 0; sentidx < SENTENCES.length; sentidx++) {
+        // Recalibrate every 20 sentences (not at the very start)
+        if (sentidx > 0 && sentidx % 20 === 0) {
+          subTimeline.push(...makeRecalibrationNode(sentidx));
+        }
+        if (catchTrials[String(sentidx)]) {
+          const ct = catchTrials[String(sentidx)];
+          subTimeline.push(makeCatchTrialNode(ct.sentence, sentidx, catchIdx++, ct.type));
+        }
+        subTimeline.push(...makeSentenceTrials(SENTENCES[sentidx], sentidx));
+      }
+
+      subTimeline.push({
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `
+          <div class="instructions">
+            <h2>L'expérience est terminée!</h2>
+            <p>Merci pour votre participation!</p>
+          </div>
+        `,
+        choices: [" "],
+        on_start: () => {
+          sendTrigger("experiment_end");
+          showGazeDot = false;
+          const dot = document.getElementById("gaze-dot");
+          if (dot) dot.style.display = "none";
+        },
+        on_finish: () => {
+          const allData = jsPsych.data.get();
+          const catchData = allData.filter({ task: "catch" });
+
+          // Send data to Python while socket is still open
+          ws.send(JSON.stringify({ cmd: "save_data", data_type: "experiment_csv", content: allData.csv() }));
+          ws.send(JSON.stringify({ cmd: "save_data", data_type: "catch_trials_csv", content: catchData.csv() }));
+          ws.send(JSON.stringify({ cmd: "save_data", data_type: "gaze_json", content: JSON.stringify(gazeLog, null, 2) }));
+
+          // Small delay to let messages flush before closing
+          setTimeout(() => stopExperiment(), 500);
+        }
+      });
+
+      jsPsych.addNodeToEndOfTimeline({ timeline: subTimeline });
+    }
+  });
+
+  // ── Run ────────────────────────────────────────────────────────
+  jsPsych.run(timeline);
+
+  </script>
+</body>
+</html>
