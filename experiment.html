@@ -538,7 +538,7 @@
         type: jsPsychHtmlKeyboardResponse,
         stimulus: '<div style="font-size:80px;text-align:center;">+</div>',
         choices: "NO_KEYS",
-        trial_duration: 1000,
+        trial_duration: 0, // todo: change it back whenever you can 
         on_start: () => sendTrigger(`fixation_onset_${trialId}`)
       },
       {
@@ -622,9 +622,10 @@
       on_start: () => sendTrigger(`catch_onset_${catchidx}`),
       on_finish: (data) => {
         sendTrigger(`catch_offset_${catchidx}`);
-        data.response_label   = data.response === "ArrowUp" ? "Oui" : "Non";
+        data.response_label = data.response === "ArrowUp" ? "Oui" : "Non";
         data.correct_response = type === "seen" ? "Oui" : "Non";
-        data.correct          = (data.response === "ArrowUp") === (type === "seen");
+        data.correct = (data.response === "ArrowUp") === (type === "seen");
+
       }
     };
   }
@@ -676,13 +677,17 @@
         },
         on_finish: () => {
           const allData = jsPsych.data.get();
-          const catchData = allData.filter(trial => trial.task === "catch");
+          const catchData = allData.filter({ task: "catch" });
+
+          // ── Debug ──────────────────────────────────────────
+          console.log("[DEBUG] Total trials:", allData.count());
+          console.log("[DEBUG] Catch trials found:", catchData.count());
+          console.log("[DEBUG] Catch trial values:", catchData.values());
+          // ───────────────────────────────────────────────────
 
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "experiment_csv", content: allData.csv() }));
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "catch_trials_csv", content: catchData.csv() }));
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "gaze_json", content: JSON.stringify(gazeLog, null, 2) }));
-          // Also save the order used so results can be decoded later
-          // ws.send(JSON.stringify({ cmd: "save_data", data_type: "sentence_order_json", content: JSON.stringify(SENTENCE_ORDER) }));
 
           setTimeout(() => stopExperiment(), 500);
         }
