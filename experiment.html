@@ -566,7 +566,7 @@
     ];
   }
 
-  function makeCatchTrialNode(sentence, sentidx, catchidx, type) {
+  function makeCatchTrialNode(sentence, sentidx, catchidx, type, sentenceFirst, sentenceSecond) {
     const question = `Avez-vous vu la phrase suivante ?<br><br><em>${sentence}</em>`;
     return {
       type: jsPsychHtmlKeyboardResponse,
@@ -618,7 +618,7 @@
         </div>
       `,
       choices: ["ArrowUp", "ArrowDown"],
-      data: { task: "catch", sentence: sentence, catch_index: catchidx, sentence_position: sentidx, catch_type: type },
+      data: { task: "catch", sentence: sentence, catch_index: catchidx, sentence_position: sentidx, catch_type: type, sentence_first: sentenceFirst, sentence_second: sentenceSecond },
       on_start: () => sendTrigger(`catch_onset_${catchidx}`),
       on_finish: (data) => {
         sendTrigger(`catch_offset_${catchidx}`);
@@ -653,7 +653,9 @@
         // Catch trials keyed by position in the shuffled order (matches Python)
         if (catchTrials[String(i)]) {
           const ct = catchTrials[String(i)];
-          subTimeline.push(makeCatchTrialNode(ct.sentence, i, catchIdx++, ct.type));
+          const prevFirst  = i > 0 ? SENTENCES_FIRST[i - 1]  : "";
+          const prevSecond = i > 0 ? SENTENCES_SECOND[i - 1] : "";
+          subTimeline.push(makeCatchTrialNode(ct.sentence, i, catchIdx++, ct.type, prevFirst, prevSecond));
         }
 
         subTimeline.push(...makeSentenceTrials(
