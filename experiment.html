@@ -165,6 +165,7 @@
 
   let ws = null;
   let gazeLog = [];
+  let catchTrialResults = [];
   let connected = false;
   let showGazeDot = true;
   let catchTrials = {};
@@ -538,7 +539,7 @@
         type: jsPsychHtmlKeyboardResponse,
         stimulus: '<div style="font-size:80px;text-align:center;">+</div>',
         choices: "NO_KEYS",
-        trial_duration: 0, // todo: change it back whenever you can 
+        trial_duration: 1000,
         on_start: () => sendTrigger(`fixation_onset_${trialId}`)
       },
       {
@@ -622,10 +623,23 @@
       on_start: () => sendTrigger(`catch_onset_${catchidx}`),
       on_finish: (data) => {
         sendTrigger(`catch_offset_${catchidx}`);
-        data.response_label = data.response === "ArrowUp" ? "Oui" : "Non";
+        data.response_label   = data.response === "ArrowUp" ? "Oui" : "Non";
         data.correct_response = type === "seen" ? "Oui" : "Non";
-        data.correct = (data.response === "ArrowUp") === (type === "seen");
+        data.correct          = (data.response === "ArrowUp") === (type === "seen");
 
+        catchTrialResults.push({
+          catch_index:       catchidx,
+          sentence_position: sentidx,
+          sentence:          sentence,
+          sentence_first:    sentenceFirst,
+          sentence_second:   sentenceSecond,
+          catch_type:        type,
+          response:          data.response,
+          response_label:    data.response_label,
+          correct_response:  data.correct_response,
+          correct:           data.correct,
+          rt:                data.rt
+        });
       }
     };
   }
@@ -677,17 +691,23 @@
         },
         on_finish: () => {
           const allData = jsPsych.data.get();
-          const catchData = allData.filter({ task: "catch" });
 
-          // ── Debug ──────────────────────────────────────────
-          console.log("[DEBUG] Total trials:", allData.count());
-          console.log("[DEBUG] Catch trials found:", catchData.count());
-          console.log("[DEBUG] Catch trial values:", catchData.values());
-          // ───────────────────────────────────────────────────
+          function buildCSV(rows) {
+            if (rows.length === 0) return "";
+            const keys = Object.keys(rows[0]);
+            const escape = v => {
+              const s = (v === null || v === undefined) ? "" : String(v);
+              return s.includes(",") || s.includes('"') || s.includes("\n")
+                ? `"${s.replace(/"/g, '""')}"` : s;
+            };
+            return [keys.join(","), ...rows.map(r => keys.map(k => escape(r[k])).join(","))].join("\n");
+          }
 
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "experiment_csv", content: allData.csv() }));
-          ws.send(JSON.stringify({ cmd: "save_data", data_type: "catch_trials_csv", content: catchData.csv() }));
+          ws.send(JSON.stringify({ cmd: "save_data", data_type: "catch_trials_csv", content: buildCSV(catchTrialResults) }));
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "gaze_json", content: JSON.stringify(gazeLog, null, 2) }));
+          // Also save the order used so results can be decoded later
+          // ws.send(JSON.stringify({ cmd: "save_data", data_type: "sentence_order_json", content: JSON.stringify(SENTENCE_ORDER) }));
 
           setTimeout(() => stopExperiment(), 500);
         }
