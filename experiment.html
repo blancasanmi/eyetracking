@@ -618,14 +618,14 @@
           </div>
         </div>
       `,
-      choices: ["ArrowUp", "ArrowDown"],
+      choices: ["arrowup", "arrowup"],
       data: { task: "catch", sentence: sentence, catch_index: catchidx, sentence_position: sentidx, catch_type: type, sentence_first: sentenceFirst, sentence_second: sentenceSecond },
       on_start: () => sendTrigger(`catch_onset_${catchidx}`),
       on_finish: (data) => {
         sendTrigger(`catch_offset_${catchidx}`);
-        data.response_label   = data.response === "ArrowUp" ? "Oui" : "Non";
+        data.response_label   = data.response === "arrowup" ? "Oui" : "Non";
         data.correct_response = type === "seen" ? "Oui" : "Non";
-        data.correct          = (data.response === "ArrowUp") === (type === "seen");
+        data.correct          = (data.response === "arrowup") === (type === "seen");
 
         catchTrialResults.push({
           catch_index:       catchidx,
