@@ -330,8 +330,9 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                     avg_error, valid_points, attempts = await run_logic()
 
                     if attempts >= MAX_CALIB_ATTEMPTS:
-                        loop = asyncio.get_running_loop()
-                        await loop.run_in_executor(None, show_experimenter_alert)
+                        await ws.send(json.dumps({"type": "experimenter_alert"}))
+                        # wait for experimenter to click OK in the browser before retrying
+                        await ws.recv()  # browser sends back {"cmd": "calibration_resume"}
                         avg_error, valid_points, attempts = await run_logic()
 
                     tracker.start_recording()
