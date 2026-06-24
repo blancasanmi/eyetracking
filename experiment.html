@@ -602,7 +602,7 @@
         on_start: () => {
           sendTrigger("experiment_end");
           showGazeDot = false;
-          
+
           const dot = document.getElementById("gaze-dot");
           if (dot) dot.style.display = "none";
 
@@ -623,7 +623,7 @@
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "catch_trials_csv", content: buildCSV(catchTrialResults) }));
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "gaze_json", content: JSON.stringify(gazeLog, null, 2) }));
 
-          setTimeout(() => stopExperiment(), 500);
+          setTimeout(() => stopExperiment(), 3000);
         }
       });
 
