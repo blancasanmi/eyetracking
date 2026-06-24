@@ -331,16 +331,15 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
 
                     if attempts >= MAX_CALIB_ATTEMPTS:
                         await ws.send(json.dumps({"type": "experimenter_alert"}))
-                        # wait for experimenter to click OK in the browser before retrying
-                        await ws.recv()  # browser sends back {"cmd": "calibration_resume"}
-
-                    tracker.start_recording()
-                    await ws.send(json.dumps({
-                        "type":         "calibration_done",
-                        "avg_error":    avg_error,
-                        "valid_points": valid_points,
-                        "attempts":     attempts,
-                    }))
+                        # Don't send calibration_done yet - let calibration_resume handler retry
+                    else:
+                        tracker.start_recording()
+                        await ws.send(json.dumps({
+                            "type":         "calibration_done",
+                            "avg_error":    avg_error,
+                            "valid_points": valid_points,
+                            "attempts":     attempts,
+                        }))
 
                 elif cmd == "calibration_resume":
                     avg_error, valid_points, attempts = await run_logic()
