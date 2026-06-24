@@ -27,13 +27,12 @@
   }
 
   .jspsych-html-button-response-stimulus {
-    /* remove the old max-height/flex rules */
     max-height: none;
     display: block;
   }
 
   .jspsych-html-button-response-btngroup {
-    margin-top: 20px;  /* tight gap between sentence and buttons */
+    margin-top: 20px;
   }
 
   .sentence-container {
@@ -41,7 +40,6 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    /* remove height: 50vh — let content size itself */
     height: auto;
     width: 100%;
     padding: 40px;
@@ -52,24 +50,22 @@
 
   .sentence-text {
     font-family: 'Courier New', monospace;
-    font-size: 40px;  /* responsive, never overflows */
+    font-size: 40px;
     line-height: 2.2;
     letter-spacing: 2px;
     text-align: center;
     color: #111;
-    max-width: 90vw;   /* long sentences wrap instead of overflowing */
+    max-width: 90vw;
     width: 100%;
   }
 
   .sentence-divider {
     width: 60%;
     border: none;
-    /* border-top: 2px solid #ccc; */
     margin: 0;
   }
 
-  /* ── Catch trial layout fixes ─────────────────────────────────── */
-    #jspsych-html-button-response-stimulus {
+  #jspsych-html-button-response-stimulus {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -84,12 +80,11 @@
     width: 100%;
   }
 
-  /* Override jsPsych's default button trial container */
   .jspsych-content {
     max-width: 100% !important;
     width: 100% !important;
   }
-  
+
   .jspsych-html-button-response-button button {
     font-family: 'Courier New', monospace;
     font-size: 22px;
@@ -99,7 +94,6 @@
     cursor: pointer;
   }
 
-  /* ── Gaze cursor overlay ──────────────────────────────────── */
   #gaze-dot {
     position: fixed;
     width: 20px;
@@ -128,7 +122,6 @@
     line-height: 1.6;
   }
 
-  /* ── Consent form ─────────────────────────────────────────── */
   #container-consent {
     padding: 40px;
     max-width: 900px;
@@ -136,7 +129,7 @@
     overflow-y: auto;
     max-height: 100vh;
   }
-</style>
+  </style>
 </head>
 <body>
   <div id="gaze-dot"></div>
@@ -147,13 +140,10 @@
   // ═══════════════════════════════════════════════════════════════
 
   const WS_URL = "ws://localhost:8765";
-
   const SHOW_GAZE_DOT = false;
 
   // ═══════════════════════════════════════════════════════════════
   //  SENTENCES + CATCH TRIALS
-  //  Populated from the Python relay's "init" message, which owns
-  //  the shuffle so both sides stay in sync.
   // ═══════════════════════════════════════════════════════════════
 
   let SENTENCES_FIRST  = [];
@@ -183,6 +173,87 @@
     return dot;
   }
 
+  // ── Experimenter alert overlay ─────────────────────────────────
+  // Extracted as a named function so it can be reused in both
+  // the main onmessage handler and the temporary calibration handler.
+
+  function showExperimenterAlert() {
+    // Remove any existing overlay first
+    const existing = document.getElementById("experimenter-alert");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "experimenter-alert";
+    overlay.style.cssText = `
+      position: fixed; inset: 0; background: red;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 9999;
+    `;
+    overlay.innerHTML = `
+      <p style="color:white; font-size:2.5rem; font-weight:bold; text-align:center;">
+        La calibration échoue trop souvent.<br>Appelez l'expérimentateur.
+      </p>
+      <button id="resume-calib-btn" style="margin-top:2rem; font-size:1.5rem; padding:1rem 2rem;">
+        Relancer la calibration
+      </button>
+    `;
+    document.body.appendChild(overlay);
+
+    document.getElementById("resume-calib-btn").addEventListener("click", () => {
+      overlay.remove();
+      ws.send(JSON.stringify({ cmd: "calibration_resume" }));
+    });
+  }
+
+  // ── Main WebSocket message handler ────────────────────────────
+
+  function handleMessage(event) {
+    const msg = JSON.parse(event.data);
+
+    if (msg.type === "init") {
+      SENTENCES_FIRST  = msg.sentences_first;
+      SENTENCES_SECOND = msg.sentences_second;
+      catchTrials = msg.catch_trials;
+      catchTrialsReceived = true;
+      console.log("Init received:", SENTENCES_FIRST.length, "pairs,", Object.keys(catchTrials).length, "catch trials");
+      if (onCatchTrialsReceived) onCatchTrialsReceived();
+    }
+
+    if (msg.type === "gaze" && msg.data) {
+      const d = msg.data;
+      const sample = {
+        fpogx:   parseFloat(d.FPOGX),
+        fpogy:   parseFloat(d.FPOGY),
+        fpogd:   parseFloat(d.FPOGD || 0),
+        fpogv:   parseInt(d.FPOGV || 0),
+        fpogid:  parseInt(d.FPOGID || 0),
+        bpogx:   parseFloat(d.BPOGX || d.FPOGX),
+        bpogy:   parseFloat(d.BPOGY || d.FPOGY),
+        bpogv:   parseInt(d.BPOGV || 0),
+        time:    parseFloat(d.TIME || 0),
+        user_data: d.USER_DATA || "",
+        local_ts: performance.now()
+      };
+      gazeLog.push(sample);
+
+      if (SHOW_GAZE_DOT && showGazeDot) {
+        const dot = ensureGazeDot();
+        if (sample.fpogv) {
+          dot.style.display = "block";
+          dot.style.left = (sample.fpogx * window.innerWidth) + "px";
+          dot.style.top  = (sample.fpogy * window.innerHeight) + "px";
+        } else {
+          dot.style.display = "none";
+        }
+      }
+    }
+
+    if (msg.type === "experimenter_alert") {
+      showExperimenterAlert();
+    }
+  }
+
   function connectGazePoint() {
     return new Promise((resolve, reject) => {
       ws = new WebSocket(WS_URL);
@@ -203,45 +274,7 @@
         console.log("[GP] WebSocket closed");
       };
 
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "init") {
-          SENTENCES_FIRST  = msg.sentences_first;
-          SENTENCES_SECOND = msg.sentences_second;
-          catchTrials = msg.catch_trials;
-          catchTrialsReceived = true;
-          console.log("Init received:", SENTENCES_FIRST.length, "pairs,", Object.keys(catchTrials).length, "catch trials");
-          if (onCatchTrialsReceived) onCatchTrialsReceived();
-        }
-        if (msg.type === "gaze" && msg.data) {
-          const d = msg.data;
-          const sample = {
-            fpogx: parseFloat(d.FPOGX),
-            fpogy: parseFloat(d.FPOGY),
-            fpogd: parseFloat(d.FPOGD || 0),
-            fpogv: parseInt(d.FPOGV || 0),
-            fpogid: parseInt(d.FPOGID || 0),
-            bpogx: parseFloat(d.BPOGX || d.FPOGX),
-            bpogy: parseFloat(d.BPOGY || d.FPOGY),
-            bpogv: parseInt(d.BPOGV || 0),
-            time: parseFloat(d.TIME || 0),
-            user_data: d.USER_DATA || "",
-            local_ts: performance.now()
-          };
-          gazeLog.push(sample);
-
-          if (SHOW_GAZE_DOT && showGazeDot) {
-            const dot = ensureGazeDot();
-            if (sample.fpogv) {
-              dot.style.display = "block";
-              dot.style.left = (sample.fpogx * window.innerWidth) + "px";
-              dot.style.top  = (sample.fpogy * window.innerHeight) + "px";
-            } else {
-              dot.style.display = "none";
-            }
-          }
-        }
-      };
+      ws.onmessage = handleMessage;
     });
   }
 
@@ -265,21 +298,12 @@
     }
   }
 
-  function makeRecalibrationNode(sentidx) {
-  return [
-    {
-      type: jsPsychHtmlKeyboardResponse,
-      stimulus: `
-        <div class="instructions">
-          <h2>Pause — Recalibration</h2>
-          <p>Nous allons recalibrer le suivi oculaire.</p>
-          <p>Appuyez sur <strong>ESPACE</strong> pour lancer la recalibration.</p>
-        </div>
-      `,
-      choices: [" "],
-      on_start: () => sendTrigger(`recalibration_prompt_${sentidx}`)
-    },
-    {
+  // ── Calibration jsPsych node ───────────────────────────────────
+  // The temporary onmessage handler also calls showExperimenterAlert()
+  // so the alert works even during the calibration wait.
+
+  function makeCalibrationCallFunction(label, done_trigger) {
+    return {
       type: jsPsychCallFunction,
       async: true,
       func: function(done) {
@@ -287,51 +311,71 @@
 
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data);
+
           if (msg.type === "calibration_done" || msg.type === "calibration_result") {
-            console.log("[RECALIB] Done at sentence", sentidx);
+            console.log(`[CALIB] Done (${label})`);
             ws.onmessage = originalOnMessage;
             done();
+          } else if (msg.type === "experimenter_alert") {
+            showExperimenterAlert();
           } else {
             if (typeof originalOnMessage === "function") originalOnMessage(event);
           }
         };
 
+        console.log(`[CALIB] Launching calibration (${label})...`);
         startCalibration();
-        sendTrigger(`recalibration_start_${sentidx}`);
+        if (done_trigger) sendTrigger(done_trigger);
       }
-    },
-    {
-      type: jsPsychHtmlKeyboardResponse,
-      stimulus: `
-        <div class="instructions">
-          <h2>Recalibration terminée</h2>
-          <p>Appuyez sur <strong>ESPACE</strong> pour continuer la lecture.</p>
-        </div>
-      `,
-      choices: [" "]
-    }
-  ];
-}
+    };
+  }
+
+  function makeRecalibrationNode(sentidx) {
+    return [
+      {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `
+          <div class="instructions">
+            <h2>Pause — Recalibration</h2>
+            <p>Nous allons recalibrer le suivi oculaire.</p>
+            <p>Appuyez sur <strong>ESPACE</strong> pour lancer la recalibration.</p>
+          </div>
+        `,
+        choices: [" "],
+        on_start: () => sendTrigger(`recalibration_prompt_${sentidx}`)
+      },
+      makeCalibrationCallFunction(`recalib_${sentidx}`, `recalibration_start_${sentidx}`),
+      {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `
+          <div class="instructions">
+            <h2>Recalibration terminée</h2>
+            <p>Appuyez sur <strong>ESPACE</strong> pour continuer la lecture.</p>
+          </div>
+        `,
+        choices: [" "]
+      }
+    ];
+  }
 
   // ═══════════════════════════════════════════════════════════════
   //  jsPsych EXPERIMENT
   // ═══════════════════════════════════════════════════════════════
 
   const jsPsych = initJsPsych({
-  on_finish: function () {
-    const allData = jsPsych.data.get();
-
-    if (typeof jatos !== "undefined") {
-      jatos.submitResultData(JSON.stringify({
-        jspsych: allData.json(),
-        gaze: gazeLog
-      }), jatos.startNextComponent);
+    on_finish: function () {
+      const allData = jsPsych.data.get();
+      if (typeof jatos !== "undefined") {
+        jatos.submitResultData(JSON.stringify({
+          jspsych: allData.json(),
+          gaze: gazeLog
+        }), jatos.startNextComponent);
+      }
     }
-  }
   });
 
   const timeline = [];
-  
+
   // ── 1. Connect to relay ────────────────────────────────────────
 
   timeline.push({
@@ -344,8 +388,7 @@
         <p>Cliquez sur la touche <strong>ESPACE</strong> pour continuer.</p>
       </div>
     `,
-    choices: [" "],
-    on_finish: () => {}
+    choices: [" "]
   });
 
   timeline.push({
@@ -361,9 +404,9 @@
     }
   });
 
-// ── 2. Calibration ────────────────────────────────────────────
+  // ── 2. Calibration ────────────────────────────────────────────
 
-    timeline.push({
+  timeline.push({
     type: jsPsychHtmlKeyboardResponse,
     stimulus: `
       <div class="instructions">
@@ -379,31 +422,7 @@
     choices: [" "]
   });
 
-  timeline.push({
-    type: jsPsychCallFunction,
-    async: true,
-    func: function(done) {
-      const originalOnMessage = ws.onmessage;
-      
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        
-        if (msg.type === "calibration_done" || msg.type === "calibration_result") {
-          console.log("[CALIB] Complete structure received:", msg.data);
-          ws.onmessage = originalOnMessage; 
-          done();
-        } else {
-          if (typeof originalOnMessage === "function") {
-            originalOnMessage(event);
-          }
-        }
-      };
-
-      console.log("[CALIB] Launching calibration routine...");
-      startCalibration();
-      sendTrigger("calibration_start");
-    }
-  });
+  timeline.push(makeCalibrationCallFunction("initial", "calibration_start"));
 
   // ── 3. Gaze check ─────────────────────────────────────────────
 
@@ -447,7 +466,6 @@
 
   // ── 4. Sentence reading trials ────────────────────────────────
 
-  // presentationIdx = position in the randomized run (0, 1, 2 …)
   function makeSentenceTrials(sentenceFirst, sentenceSecond, presentationIdx) {
     const trialId = `pres${presentationIdx}`;
     return [
@@ -535,7 +553,7 @@
         </div>
       `,
       choices: ["arrowup", "arrowdown"],
-      data: { task: "catch", sentence: sentence, catch_index: catchidx, sentence_position: sentidx, catch_type: type, sentence_first: sentenceFirst, sentence_second: sentenceSecond },
+      data: { task: "catch", sentence, catch_index: catchidx, sentence_position: sentidx, catch_type: type, sentence_first: sentenceFirst, sentence_second: sentenceSecond },
       on_start: () => sendTrigger(`catch_onset_${catchidx}`),
       on_finish: (data) => {
         sendTrigger(`catch_offset_${catchidx}`);
@@ -546,7 +564,7 @@
         catchTrialResults.push({
           catch_index:       catchidx,
           sentence_position: sentidx,
-          sentence:          sentence,
+          sentence,
           sentence_first:    sentenceFirst,
           sentence_second:   sentenceSecond,
           catch_type:        type,
@@ -570,12 +588,10 @@
 
       for (let i = 0; i < SENTENCES_FIRST.length; i++) {
 
-        // Recalibrate every 20 sentences (not at the very start)
         if (i > 0 && i % 20 === 0) {
           subTimeline.push(...makeRecalibrationNode(i));
         }
 
-        // Catch trials keyed by position in the shuffled order (matches Python)
         if (catchTrials[String(i)]) {
           const ct = catchTrials[String(i)];
           const prevFirst  = i > 0 ? SENTENCES_FIRST[i - 1]  : "";
@@ -602,10 +618,10 @@
         on_start: () => {
           sendTrigger("experiment_end");
           showGazeDot = false;
-
           const dot = document.getElementById("gaze-dot");
           if (dot) dot.style.display = "none";
-
+        },
+        on_finish: () => {
           const allData = jsPsych.data.get();
 
           function buildCSV(rows) {
