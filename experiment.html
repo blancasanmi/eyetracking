@@ -620,8 +620,6 @@
           showGazeDot = false;
           const dot = document.getElementById("gaze-dot");
           if (dot) dot.style.display = "none";
-        },
-        on_finish: () => {
           const allData = jsPsych.data.get();
 
           function buildCSV(rows) {
@@ -640,6 +638,9 @@
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "gaze_json", content: JSON.stringify(gazeLog, null, 2) }));
 
           setTimeout(() => stopExperiment(), 3000);
+        },
+        on_finish: () => {
+          
         }
       });
 
