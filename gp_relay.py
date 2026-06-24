@@ -22,6 +22,8 @@ import datetime
 import websockets
 import re
 import csv
+import tkinter as tk
+from tkinter import messagebox
 
 
 from opengaze import OpenGazeTracker
@@ -272,6 +274,40 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
     # ------------------------------------------------------------------
     # Task: receive commands from the browser
     # ------------------------------------------------------------------
+    async def run_logic():
+        avg_error = float("inf")
+        valid_points = 0
+        attempts = 0
+
+        for _ in range(MAX_CALIB_ATTEMPTS):
+            try:
+                avg_error, valid_points = await _run_calibration(tracker)
+                attempts += 1
+                print(f"[CALIB] Attempt {attempts}: avg_error={avg_error:.4f}, valid_points={valid_points}")
+
+                if avg_error < CALIB_ERROR_THRESH:
+                    break  # good enough, stop retrying
+
+            except TimeoutError as exc:
+                print(f"[GP] {exc}")
+                await ws.send(json.dumps({
+                    "type":   "calibration_failed",
+                    "reason": "timeout",
+                    "detail": str(exc),
+                }))
+                break
+
+        return avg_error, valid_points, attempts
+    
+    def show_experimenter_alert():
+        root = tk.Tk()
+        root.withdraw()  # hide the tiny root window
+        messagebox.showwarning(
+            "Calibration Failed",
+            "La calibration échoue trop souvent.\nAppellez l'expérimentateur."
+        )
+        root.destroy()
+
     async def receive_commands() -> None:
         try:
             async for raw in ws:
@@ -290,28 +326,13 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                         f.write(content)
                     print(f"[DATA] Saved {data_type} to {filename}")
                 elif cmd == "calibrate":
-                    avg_error = float("inf")
-                    valid_points = 0
-                    attempts = 0
-                    success = False
 
-                    for _ in range(MAX_CALIB_ATTEMPTS):
-                        try:
-                            avg_error, valid_points = await _run_calibration(tracker)
-                            attempts += 1
-                            print(f"[CALIB] Attempt {attempts}: avg_error={avg_error:.4f}, valid_points={valid_points}")
+                    avg_error, valid_points, attempts = await run_logic()
 
-                            if avg_error < CALIB_ERROR_THRESH:
-                                break  # good enough, stop retrying
-
-                        except TimeoutError as exc:
-                            print(f"[GP] {exc}")
-                            await ws.send(json.dumps({
-                                "type":   "calibration_failed",
-                                "reason": "timeout",
-                                "detail": str(exc),
-                            }))
-                            break
+                    if attempts >= MAX_CALIB_ATTEMPTS:
+                        loop = asyncio.get_running_loop()
+                        await loop.run_in_executor(None, show_experimenter_alert)
+                        avg_error, valid_points, attempts = await run_logic()
 
                     tracker.start_recording()
                     await ws.send(json.dumps({
