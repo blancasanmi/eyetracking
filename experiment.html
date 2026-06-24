@@ -156,6 +156,7 @@
   let ws = null;
   let gazeLog = [];
   let catchTrialResults = [];
+  let calibrationLog = [];
   let connected = false;
   let showGazeDot = true;
   let catchTrials = {};
@@ -314,6 +315,16 @@
 
           if (msg.type === "calibration_done" || msg.type === "calibration_result") {
             console.log(`[CALIB] Done (${label})`);
+            // Store calibration data
+            if (msg.type === "calibration_done") {
+              calibrationLog.push({
+                label: label,
+                avg_error: msg.avg_error,
+                valid_points: msg.valid_points,
+                attempts: msg.attempts,
+                timestamp: new Date().toISOString()
+              });
+            }
             ws.onmessage = originalOnMessage;
             done();
           } else if (msg.type === "experimenter_alert") {
@@ -635,6 +646,7 @@
 
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "experiment_csv", content: allData.csv() }));
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "catch_trials_csv", content: buildCSV(catchTrialResults) }));
+          ws.send(JSON.stringify({ cmd: "save_data", data_type: "calibration_json", content: JSON.stringify(calibrationLog, null, 2) }));
           ws.send(JSON.stringify({ cmd: "save_data", data_type: "gaze_json", content: JSON.stringify(gazeLog, null, 2) }));
 
           setTimeout(() => stopExperiment(), 3000);
