@@ -458,9 +458,9 @@
         <h2>Calibration</h2>
         <p>Un écran de calibration apparaîtra dans la fenêtre.</p>
         <p>Suivez le point en mouvement avec vos yeux (sans bouger la tête) et sans prédire où il va.</p>
+        <p>Puis un écran apparaîtra, dans lequel vous pouvez vérifier si le point vert suit votre regard sur l'écran.</p>
         <p>Si la calibration échoue, une deuxième tentative sera effectuée.</p>
-        <p>Si celle ci échoue également, l'expérience sera interrompue.</p>
-        <p>Appelez alors l'administrateur.</p>
+        <p>Appelez l'administrateur si vous recontrez des problèmes.</p>
         <p>Appuyez sur la touche <strong>ESPACE</strong> pour lancer la calibration et attendez 2 secondes.</p>
       </div>
     `,
@@ -500,6 +500,10 @@
     stimulus: `
       <div class="instructions">
         <h2>L'expérience va commencer</h2>
+        <p>Lorsque vous avez terminé de lire, appuyez sur la touche <strong>ESPACE</strong> pour passer aux phrases suivantes.</p>
+        <p>Entre les phrases, un point de fixation apparaîtra au centre de l'écran pendant 2 secondes. Veuillez le regarder jusqu'à ce que la phrase suivante s'affiche.</p>
+        <p>Il y aura 4 pauses au cours de l'expérience. Vous pourrez vous détendre un instant avant de poursuivre avec une nouvelle calibration.</p>
+        <p>Des questions vous seront également posées, auxquelles vous répondrez en utilisant les flèches du clavier.</p>
         <p>Appuyez sur la touche <strong>ESPACE</strong> lorsque vous êtes prêt(e) à commencer.</p>
       </div>
     `,
@@ -539,7 +543,7 @@
         type: jsPsychHtmlKeyboardResponse,
         stimulus: '<div style="font-size:80px;text-align:center;">+</div>',
         choices: "NO_KEYS",
-        trial_duration: 1000,
+        trial_duration: 2000,
         on_start: () => sendTrigger(`fixation_onset_${trialId}`)
       },
       {
