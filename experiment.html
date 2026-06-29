@@ -631,28 +631,33 @@
           showGazeDot = false;
           const dot = document.getElementById("gaze-dot");
           if (dot) dot.style.display = "none";
-          const allData = jsPsych.data.get();
-
-          function buildCSV(rows) {
-            if (rows.length === 0) return "";
-            const keys = Object.keys(rows[0]);
-            const escape = v => {
-              const s = (v === null || v === undefined) ? "" : String(v);
-              return s.includes(",") || s.includes('"') || s.includes("\n")
-                ? `"${s.replace(/"/g, '""')}"` : s;
-            };
-            return [keys.join(","), ...rows.map(r => keys.map(k => escape(r[k])).join(","))].join("\n");
-          }
-
-          ws.send(JSON.stringify({ cmd: "save_data", data_type: "experiment_csv", content: allData.csv() }));
-          ws.send(JSON.stringify({ cmd: "save_data", data_type: "catch_trials_csv", content: buildCSV(catchTrialResults) }));
-          ws.send(JSON.stringify({ cmd: "save_data", data_type: "calibration_json", content: JSON.stringify(calibrationLog, null, 2) }));
-          ws.send(JSON.stringify({ cmd: "save_data", data_type: "gaze_json", content: JSON.stringify(gazeLog, null, 2) }));
-
-          setTimeout(() => stopExperiment(), 3000);
         },
         on_finish: () => {
-          
+          setTimeout(() => {
+            const allData = jsPsych.data.get();
+
+            function buildCSV(rows) {
+              if (rows.length === 0) return "";
+              const keys = Object.keys(rows[0]);
+              const escape = v => {
+                const s = (v === null || v === undefined) ? "" : String(v);
+                return s.includes(",") || s.includes('"') || s.includes("\n")
+                  ? `"${s.replace(/"/g, '""')}"` : s;
+              };
+              return [keys.join(","), ...rows.map(r => keys.map(k => escape(r[k])).join(","))].join("\n");
+            }
+
+            try {
+              ws.send(JSON.stringify({ cmd: "save_data", data_type: "experiment_csv", content: allData.csv() }));
+              ws.send(JSON.stringify({ cmd: "save_data", data_type: "catch_trials_csv", content: buildCSV(catchTrialResults) }));
+              ws.send(JSON.stringify({ cmd: "save_data", data_type: "calibration_json", content: JSON.stringify(calibrationLog, null, 2) }));
+              ws.send(JSON.stringify({ cmd: "save_data", data_type: "gaze_json", content: JSON.stringify(gazeLog, null, 2) }));
+            } catch (e) {
+              console.error("Failed sending data:", e);
+            }
+
+            setTimeout(() => stopExperiment(), 3000);
+          }, 0);
         }
       });
 
