@@ -51,7 +51,7 @@ args = parser.parse_args()
 participant_id = args.participant.strip()
 
 # create data/participant_{number}/ if it doesn't exist
-output_dir = os.path.join("FOLDER", f"participant_{participant_id}")
+output_dir = os.path.join(FOLDER, f"participant_{participant_id}")
 os.makedirs(output_dir, exist_ok=True)
 
 LOGFILE = os.path.join(output_dir, f"gaze_{participant_id}.csv")
@@ -119,7 +119,7 @@ def load_sentences_from_js(filepath: str) -> tuple[list[str], list[str]]:
     first  = [first[i]  for i in indices]
     second = [second[i] for i in indices]
 
-    with open(f"data/sentence_order_{LOGFILE}", 'w', newline='', encoding='utf-8') as f:
+    with open(os.path.join(output_dir, f"sentence_order_{participant_id}.csv"), 'w', newline='', encoding='utf-8') as f
         writer = csv.writer(f)
         writer.writerow(['first', 'second'])
         writer.writerows(zip(first, second))
@@ -250,7 +250,7 @@ async def _run_calibration(tracker: OpenGazeTracker) -> tuple[float, int]:
 async def handler(ws: websockets.WebSocketServerProtocol) -> None:
     print("[WS] Browser connected")
 
-    tracker = OpenGazeTracker(ip=GP_HOST, port=GP_PORT, logfile=os.path.join(FOLDER, LOGFILE))
+    tracker = OpenGazeTracker(ip=GP_HOST, port=GP_PORT, logfile=LOGFILE)
     print(f"[GP] OpenGazeTracker connected to {GP_HOST}:{GP_PORT}")
 
     # Load (and shuffle) sentences, then generate catch trials from that order
@@ -337,7 +337,7 @@ async def handler(ws: websockets.WebSocketServerProtocol) -> None:
                 elif cmd == "save_data":
                     data_type = msg.get("data_type", "unknown")
                     content = msg.get("content", "")
-                    filename = os.path.join(FOLDER, f"{data_type}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.{'csv' if 'csv' in data_type else 'json'}")
+                    filename = os.path.join(output_dir, f"{data_type}_{participant_id}.{'csv' if 'csv' in data_type else 'json'}")
                     with open(filename, "w", encoding="utf-8") as f:
                         f.write(content)
                     print(f"[DATA] Saved {data_type} to {filename}")
