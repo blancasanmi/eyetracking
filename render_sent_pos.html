@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sentence Position Measurement</title>
+  <script src="sentences.js"></script>
+  <style>
+    html, body {
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    #stage {
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sentence-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: auto;
+      width: 100%;
+      padding: 40px;
+      box-sizing: border-box;
+      max-width: 90vw;
+      gap: 40px;
+    }
+
+    .sentence-text {
+      font-family: 'Courier New', monospace;
+      font-size: 40px;
+      line-height: 2.2;
+      letter-spacing: 2px;
+      text-align: center;
+      color: #111;
+      max-width: 90vw;
+      width: 100%;
+    }
+
+    .sentence-divider {
+      width: 60%;
+      border: none;
+      margin: 0;
+    }
+
+    #controls {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      font-family: sans-serif;
+      background: white;
+      padding: 10px;
+      border: 1px solid #ccc;
+    }
+
+    #status {
+      margin-top: 8px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <button id="run-btn">Measure all sentences</button>
+    <div id="status">Idle. Loaded 0 pairs.</div>
+  </div>
+  <div id="stage"></div>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════
+    // Measures on-screen line-wrap positions for every sentence
+    // pair in sentences.js. Run once (or whenever sentences.js
+    // changes) at the SAME window size / zoom / resolution as the
+    // actual experiment machine, since line wrapping depends on
+    // viewport geometry, not just text content.
+    // ═══════════════════════════════════════════════════════════
+
+    const statusEl = document.getElementById("status");
+    const stageEl = document.getElementById("stage");
+
+    statusEl.textContent = `Idle. Loaded ${SENTENCE_FIRST.length} pairs.`;
+
+    function getLineBoxes(el) {
+      const textNode = el.firstChild;
+      if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return [];
+      const text = textNode.textContent;
+
+      const fullRange = document.createRange();
+      fullRange.selectNodeContents(el);
+      const lineRects = Array.from(fullRange.getClientRects());
+
+      const words = [];
+      const wordRegex = /\S+/g;
+      let match;
+      while ((match = wordRegex.exec(text)) !== null) {
+        words.push({ start: match.index, end: match.index + match[0].length, text: match[0] });
+      }
+
+      const lines = lineRects.map(r => ({
+        top: r.top, bottom: r.bottom, left: r.left, right: r.right, words: []
+      }));
+
+      words.forEach(w => {
+        const range = document.createRange();
+        range.setStart(textNode, w.start);
+        range.setEnd(textNode, w.end);
+        const rect = range.getBoundingClientRect();
+
+        let bestLine = null, bestDist = Infinity;
+        lines.forEach(line => {
+          const dist = Math.abs(line.top - rect.top);
+          if (dist < bestDist) { bestDist = dist; bestLine = line; }
+        });
+        if (bestLine) bestLine.words.push(w.text);
+      });
+
+      return lines.map(line => ({
+        text: line.words.join(' '),
+        top: Math.round(line.top),
+        bottom: Math.round(line.bottom),
+        left: Math.round(line.left),
+        right: Math.round(line.right)
+      }));
+    }
+
+    function renderPair(first, second) {
+      stageEl.innerHTML = `
+        <div class="sentence-container">
+          <div class="sentence-text">${first}</div>
+          <hr class="sentence-divider">
+          <div class="sentence-text">${second}</div>
+        </div>
+      `;
+    }
+
+    function measureAll() {
+      const rows = [];
+
+      for (let i = 0; i < SENTENCE_FIRST.length; i++) {
+        renderPair(SENTENCE_FIRST[i], SENTENCE_SECOND[i]);
+
+        const textEls = stageEl.querySelectorAll('.sentence-text');
+        textEls.forEach((el, partIdx) => {
+          const partNr = partIdx + 1; // 1 = sentence_first, 2 = sentence_second
+          const lines = getLineBoxes(el);
+          lines.forEach((line, lineIdx) => {
+            rows.push({
+              real_index: i,
+              part_nr: partNr,
+              line_idx: lineIdx,
+              text: line.text,
+              top: line.top,
+              bottom: line.bottom,
+              left: line.left,
+              right: line.right
+            });
+          });
+        });
+      }
+
+      return rows;
+    }
+
+    function buildCSV(rows) {
+      if (rows.length === 0) return "";
+      const keys = Object.keys(rows[0]);
+      const escape = v => {
+        const s = (v === null || v === undefined) ? "" : String(v);
+        return s.includes(",") || s.includes('"') || s.includes("\n")
+          ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      return [keys.join(","), ...rows.map(r => keys.map(k => escape(r[k])).join(","))].join("\n");
+    }
+
+    function downloadCSV(content, filename) {
+      const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    document.getElementById("run-btn").addEventListener("click", () => {
+      statusEl.textContent = "Measuring...";
+      // rAF gives the browser a paint tick before we start reading layout
+      requestAnimationFrame(() => {
+        const rows = measureAll();
+        const csv = buildCSV(rows);
+        downloadCSV(csv, "sentence_positions.csv");
+        statusEl.textContent = `Done. ${rows.length} lines measured across ${SENTENCE_FIRST.length} pairs. File downloaded.`;
+        stageEl.innerHTML = "";
+      });
+    });
+  </script>
+</body>
+</html>
