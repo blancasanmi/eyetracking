@@ -19,6 +19,7 @@ import os
 import random
 import time
 import datetime
+import argparse
 import websockets
 import re
 import csv
@@ -27,6 +28,9 @@ from tkinter import messagebox
 
 
 from opengaze import OpenGazeTracker
+
+
+
 
 # ---------------------------------------------------------------------------
 # Config
@@ -38,7 +42,19 @@ WS_HOST   = "localhost"
 WS_PORT   = 8765
 
 FOLDER = "data/"
-LOGFILE   = f"gaze_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--participant", "-p", type=str, required=True,
+                     help="Participant/pilot number, e.g. 01")
+args = parser.parse_args()
+
+participant_id = args.participant.strip()
+
+# create data/participant_{number}/ if it doesn't exist
+output_dir = os.path.join("FOLDER", f"participant_{participant_id}")
+os.makedirs(output_dir, exist_ok=True)
+
+LOGFILE = os.path.join(output_dir, f"gaze_{participant_id}.csv")
 
 CALIB_POINTS: list[tuple[float, float]] = [
     (0.5,  0.1),
