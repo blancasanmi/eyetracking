@@ -119,10 +119,15 @@ def load_sentences_from_js(filepath: str) -> tuple[list[str], list[str]]:
     first  = [first[i]  for i in indices]
     second = [second[i] for i in indices]
 
-    with open(os.path.join(output_dir, f"sentence_order_{participant_id}.csv"), 'w', newline='', encoding='utf-8') as f
+    # presentation_index = position after shuffle (0..n-1)
+    # real_index         = original position before shuffle (indices[i])
+    presentation_indices = list(range(len(indices)))
+    real_indices = indices
+
+    with open(os.path.join(output_dir, f"sentence_order_{participant_id}.csv"), 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['first', 'second'])
-        writer.writerows(zip(first, second))
+        writer.writerow(['real_index', 'presentation_index', 'first', 'second'])
+        writer.writerows(zip(real_indices, presentation_indices, first, second))
 
     return first, second
 
