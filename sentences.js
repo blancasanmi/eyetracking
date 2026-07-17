@@ -195,3 +195,5 @@ const SENTENCE_SECOND = [
   "Tout le monde mange en silence, un peu déçu.",
   "Elle range les morceaux sans dire un mot, dépitée."
 ];
+
+
