@@ -387,6 +387,8 @@
   });
 
   const timeline = [];
+  const MIN_SENTENCE_ADVANCE_DELAY_MS = 2000;
+  let sentenceAdvanceKeyHandler = null;
 
   // ── 1. Connect to relay ────────────────────────────────────────
 
@@ -444,7 +446,7 @@
       <div class="instructions">
         <h2>L'expérience va commencer</h2>
         <p>Identifiez les flèches sur le clavier (↑ ↓) et la touche <strong>ESPACE</strong>. Vous les utiliserez pour naviguer dans l'expérience.</p>
-        <p>Lorsque vous avez terminé de lire, appuyez sur la touche <strong>ESPACE</strong> pour passer aux phrases suivantes.</p>
+        <p>Lorsque vous avez terminé de lire, appuyez sur la touche <strong>ESPACE</strong> pour passer à la phrase suivante.</p>
         <p>Vous serez invité(e) à répondre à des questions tout au long de l'expérience avec les flèches du clavier (↑ ↓).</p>
         <p>Entre les phrases, un point de fixation, qui s'affiche comme une croix (+), apparaîtra au centre de l'écran pendant 2 secondes. Veuillez le regarder jusqu'à ce que la phrase suivante s'affiche.</p>
         <p>Il y aura 4 pauses au cours de l'expérience. Vous pourrez vous détendre un instant avant de poursuivre avec une nouvelle calibration.</p>
@@ -506,7 +508,30 @@
           presentation_index: presentationIdx
         },
         on_start: () => sendTrigger(`sentence_onset_${trialId}`),
+        on_load: () => {
+          if (sentenceAdvanceKeyHandler) {
+            document.removeEventListener("keydown", sentenceAdvanceKeyHandler, true);
+          }
+
+          const startTime = performance.now();
+          sentenceAdvanceKeyHandler = (event) => {
+            const isSpace = event.code === "Space" || event.key === " " || event.key === "Spacebar";
+            if (!isSpace) return;
+
+            const elapsed = performance.now() - startTime;
+            if (elapsed < MIN_SENTENCE_ADVANCE_DELAY_MS) {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          };
+
+          document.addEventListener("keydown", sentenceAdvanceKeyHandler, true);
+        },
         on_finish: (data) => {
+          if (sentenceAdvanceKeyHandler) {
+            document.removeEventListener("keydown", sentenceAdvanceKeyHandler, true);
+            sentenceAdvanceKeyHandler = null;
+          }
           sendTrigger(`sentence_offset_${trialId}`);
           data.rt_ms = data.rt;
         }
