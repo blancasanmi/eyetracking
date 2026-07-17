@@ -1,5 +1,5 @@
 const SENTENCE_FIRST = [
-  "Sous le sapin, Alex trouve un cadeau mystérieux et bien emballé.",
+  "Sous le sapin, Alex trouve un cadeau mystérieux.",
   "En concert, le chanteur change soudain son programme habituel.",
   "En sortant du ciné, Manon voit l'affiche d'un nouveau film.",
   "En réunion, l'équipe découvre les résultats du projet.",
@@ -35,7 +35,7 @@ const SENTENCE_FIRST = [
   "Lucas décroche sa place en finale, sans savoir contre qui il jouera.",
   "Elle trouva un objet qui ne lui appartenait pas.",
   "Mathilde voulait entendre les bonnes nouvelles de son ami.",
-  "Elle était sur le point de sauter de l'avion avec son parachute.",
+  "Elle était sur le point de sauter avec son parachute.",
   "Elle courut allumer la radio, elle attendait impatiemment.",
   "Il ouvrit la porte après avoir entendu des voix familières.",
   "Elle reçut une lettre de sa meilleure amie qu'elle attendait.",
@@ -94,7 +94,7 @@ const SENTENCE_FIRST = [
   "Elle casse son téléphone en le faisant tomber des escaliers.",
   "On arrive au cinéma alors que la séance a déjà commencé.",
   "Il brûle le repas qu'il préparait pour ses invités.",
-  "Elle fait tomber son gâteau en sortant du four.",
+  "Elle fait tomber son gâteau en le sortant du four.",
 ];
 
 const SENTENCE_SECOND = [
@@ -182,7 +182,7 @@ const SENTENCE_SECOND = [
   "On s'installe au café d'en face pour patienter.",
   "Son mari lui propose un thé chaud en arrivant.",
   "Nous finissons par jouer aux cartes toute la soirée.",
-  "Sa fille lui fait un dessin de la vaisselle pour le réconforter.",
+  "Sa fille lui fait un dessin pour le réconforter.",
   "Une dame l'invite à partager son parapluie.",
   "Il lui offre un café en s'excusant, ça les fait rire.",
   "Ils tombent sur un petit stand de crêpes en chemin.",
