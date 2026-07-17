@@ -4,7 +4,7 @@ const SENTENCE_FIRST = [
   "En sortant du ciné, Manon voit l'affiche d'un nouveau film.",
   "En réunion, l'équipe découvre les résultats du projet.",
   "Marc se demande d'où vient la bonne odeur à la maison.",
-  "Il lit \"félicitations\" au début du courriel.",
+  "Il lit un message de félicitations au début du courriel.",
   "Sophie arrive au bureau avec un sourire énigmatique.",
   "Une femme lui tendit de l'argent dans la rue.",
   "Il nage calmement quand il entend un bruit strident.",
